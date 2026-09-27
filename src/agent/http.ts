@@ -20,13 +20,14 @@ export function createAgentHandler(config:RuntimeConfig,token:string,signal:Abor
      if(request.method==='POST')return json(await runs.create(await request.json()),201);
      return json({error:'METHOD_NOT_ALLOWED'},405);
     }
-    const match=/^\/runs\/([a-f0-9-]{36})(?:\/(config|logs|check|ingest|stop|reparse))?$/.exec(url.pathname);
+    const match=/^\/runs\/([a-f0-9-]{36})(?:\/(config|logs|check|ingest|stop|reparse|demo))?$/.exec(url.pathname);
     if(!match)return json({error:'NOT_FOUND'},404);
     const id=match[1]!,action=match[2];
     if(!action&&request.method==='GET')return json(runs.get(id));
     if(action==='config'&&request.method==='PUT')return json(await runs.update(id,await request.json()));
     if(action==='logs'&&request.method==='PUT')return json(await runs.upload(id,new Uint8Array(await request.arrayBuffer())));
     if(request.method==='POST'){
+     if(action==='demo')return json(await runs.startDemo(id,await request.json()),202);
      if(action==='check')return json(await runs.check(id));
      if(action==='ingest')return json(await runs.ingest(id),202);
      if(action==='stop')return json(await runs.stop(id));
@@ -36,7 +37,7 @@ export function createAgentHandler(config:RuntimeConfig,token:string,signal:Abor
    }catch(error){
     if(error instanceof SyntaxError)return json({error:'INVALID_REQUEST'},400);
     const code=error instanceof Error?error.message:'';
-    const statuses:Record<string,number>={RUN_NOT_FOUND:404,RUN_CAPACITY:409,RUN_ACTIVE:409,CHECK_REQUIRED:409,REPARSE_REQUIRED:409,INVALID_CONFIG:400,INVALID_LOG_INPUT:400,LOGS_REQUIRED:400,SESSION_STOPPED:410,VECTOR_EXECUTION_FAILED:422,VECTOR_START_FAILED:502,INGEST_EXITED:502,ELASTICSEARCH_FAILED:502};
+    const statuses:Record<string,number>={DEMO_UNAVAILABLE:503,INVALID_DEMO:400,RUN_NOT_FOUND:404,RUN_CAPACITY:409,RUN_ACTIVE:409,CHECK_REQUIRED:409,REPARSE_REQUIRED:409,INVALID_CONFIG:400,INVALID_LOG_INPUT:400,LOGS_REQUIRED:400,SESSION_STOPPED:410,VECTOR_EXECUTION_FAILED:422,VECTOR_START_FAILED:502,INGEST_EXITED:502,ELASTICSEARCH_FAILED:502};
     return json({error:Object.hasOwn(statuses,code)?code:'INTERNAL_ERROR'},Object.hasOwn(statuses,code)?statuses[code]:500);
    }
   }

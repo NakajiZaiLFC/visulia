@@ -7,6 +7,7 @@ import {bootstrap} from './bootstrap.js';
 import {createAgentHandler} from './http.js';
 import {serveAgent} from './server.js';
 import {RunManager} from './runs.js';
+import {generateCapturedDemo} from './captured-demo.js';
 import {NodeRunIO} from './run-io.js';
 
 process.umask(0o077);
@@ -19,7 +20,7 @@ const startupDeadline=setTimeout(()=>void services.stop(),210000);
 const lifetimeDeadline=setTimeout(()=>void services.stop(),30*60*1000);
 try{
  const config=createRuntimeConfig(process.env.VISULIA_SESSION_ID??'');
- const runs=new RunManager({root:'/work/runs',signal:services.signal,elasticsearch:{url:'http://127.0.0.1:9200',username:config.secrets.username,password:config.secrets.password},io:new NodeRunIO(config.secrets.username,config.secrets.password,services.signal)});
+ const runs=new RunManager({root:'/work/runs',demo:generateCapturedDemo,signal:services.signal,elasticsearch:{url:'http://127.0.0.1:9200',username:config.secrets.username,password:config.secrets.password},io:new NodeRunIO(config.secrets.username,config.secrets.password,services.signal)});
  const handler=createAgentHandler(config,process.env.VISULIA_AGENT_TOKEN??'',services.signal,fetch,runs);
  await prepareRuntime();
  await bootstrap(config,new NodeBootstrapIO(services));

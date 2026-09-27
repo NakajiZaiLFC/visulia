@@ -95,3 +95,48 @@ test('uploads preserve original bytes but feed exactly the preflight line repres
   assert.equal(f.manager.get(run.id).bytes,11);
  }
 });
+
+test('demo streams server lines into its run, reserves edits, and stops on request',async t=>{
+ const f=await fixture(t);let publish!:(line:string)=>Promise<void>,entered!:()=>void;
+ const ready=new Promise<void>(resolve=>{entered=resolve;});
+ const manager=new RunManager({root:f.root,signal:f.abort.signal,io:f.io,elasticsearch:{url:'http://127.0.0.1:9200',username:'test-user',password:'test-secret'},demo:async(_options,line,signal)=>{publish=line;entered();await new Promise<void>(resolve=>signal.addEventListener('abort',()=>resolve(),{once:true}));}});
+ const run=await manager.create(config);
+ await manager.startDemo(run.id,{scenario:'mixed',count:4,rate:5});await ready;
+ await assert.rejects(manager.upload(run.id,bytes),/RUN_ACTIVE/);
+ await assert.rejects(manager.check(run.id),/RUN_ACTIVE/);
+ await publish('actual-server-line');
+ assert.equal(await readFile(join(f.root,run.id,'input','upload.log'),'utf8'),'actual-server-line\n');
+ assert.equal(manager.get(run.id).demo?.received,1);
+ await manager.stop(run.id);
+ await assert.rejects(publish('late-line'),/DEMO_STOPPED/);
+});
+test('demo can append to an already checked live ingest without invalidating its configuration',async t=>{
+ const f=await fixture(t);let finished!:()=>void;
+ const done=new Promise<void>(resolve=>{finished=resolve;});
+ const manager=new RunManager({root:f.root,signal:f.abort.signal,io:f.io,elasticsearch:{url:'http://127.0.0.1:9200',username:'test-user',password:'test-secret'},demo:async(_options,line)=>{await line('new-live-line');finished();}});
+ const run=await manager.create(config);await manager.upload(run.id,bytes);await manager.check(run.id);const before=await manager.ingest(run.id);
+ await manager.startDemo(run.id,{scenario:'normal',count:1,rate:1});await done;
+ assert.equal(manager.get(run.id).revision,before.revision);
+ assert.equal(manager.get(run.id).state,'ingesting');
+ await manager.stop(run.id);
+});
+test('reparse cancels a live demo before checking its completed records',async t=>{
+ const f=await fixture(t);let entered!:()=>void;
+ const ready=new Promise<void>(resolve=>{entered=resolve;});
+ const manager=new RunManager({root:f.root,signal:f.abort.signal,io:f.io,elasticsearch:{url:'http://127.0.0.1:9200',username:'test-user',password:'test-secret'},demo:async(_options,line,signal)=>{await line('actual-line');entered();await new Promise<void>(resolve=>signal.addEventListener('abort',()=>resolve(),{once:true}));}});
+ const run=await manager.create(config);
+ await manager.startDemo(run.id,{scenario:'normal',count:100,rate:1});await ready;
+ assert.equal((await manager.reparse(run.id)).state,'ingesting');
+ await manager.stop(run.id);
+});
+test('reparse fences a queued demo append without waiting on its own mutation queue',async t=>{
+ const f=await fixture(t);let publish!:(line:string)=>Promise<void>,entered!:()=>void;
+ const ready=new Promise<void>(resolve=>{entered=resolve;});
+ const manager=new RunManager({root:f.root,signal:f.abort.signal,io:f.io,elasticsearch:{url:'http://127.0.0.1:9200',username:'test-user',password:'test-secret'},demo:async(_options,line,signal)=>{publish=line;entered();await new Promise<void>(resolve=>signal.addEventListener('abort',()=>resolve(),{once:true}));}});
+ const run=await manager.create(config);await manager.upload(run.id,bytes);
+ await manager.startDemo(run.id,{scenario:'normal',count:100,rate:1});await ready;
+ const reparse=manager.reparse(run.id),late=assert.rejects(publish('too-late'),/DEMO_STOPPED/);
+ assert.equal((await reparse).state,'ingesting');await late;
+ assert.equal(await readFile(join(f.root,run.id,'input','upload.log'),'utf8'),'valid-line\n');
+ await manager.stop(run.id);
+});
