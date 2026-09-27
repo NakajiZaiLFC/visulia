@@ -1,3 +1,13 @@
+const publicErrors=new Set(['CAPACITY','COOLDOWN','PROVISION_FAILED','UNAUTHORIZED','NOT_READY','RUN_NOT_FOUND','RUN_CAPACITY','RUN_ACTIVE','CHECK_REQUIRED','REPARSE_REQUIRED','INVALID_CONFIG','INVALID_LOG_INPUT','LOGS_REQUIRED','SESSION_STOPPED','VECTOR_EXECUTION_FAILED','VECTOR_START_FAILED','INGEST_EXITED','ELASTICSEARCH_FAILED','DEMO_UNAVAILABLE','INVALID_DEMO']);
+async function responseError(response:Response):Promise<string>{
+ const fallback='SERVER_ERROR_'+response.status,reader=response.body?.getReader();if(!reader)return fallback;
+ const chunks:Uint8Array[]=[];let size=0;
+ try{
+  while(true){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>4096){await reader.cancel();return fallback;}chunks.push(value);}
+  const parsed=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  return publicErrors.has(parsed?.error)?parsed.error:fallback;
+ }catch{return fallback;}finally{reader.releaseLock();}
+}
 export class SessionClient {
  readonly server:string;
  #session:{id:string;token:string}|undefined;
@@ -16,7 +26,7 @@ export class SessionClient {
   let response;
   try{response=await this.fetcher(this.server+path,{method,headers,redirect:'error',signal:AbortSignal.any([AbortSignal.timeout(cleanup?10000:70000),...(!cleanup&&this.signal?[this.signal]:[])]),...(content===undefined?{}:{body:content})});}
   catch{throw new Error('CONNECTION_FAILED');}
-  if(!response.ok)throw new Error('SERVER_ERROR_'+response.status);
+  if(!response.ok)throw new Error(await responseError(response));
   try{return await response.json();}catch{throw new Error('INVALID_RESPONSE');}
  }
  async create(){

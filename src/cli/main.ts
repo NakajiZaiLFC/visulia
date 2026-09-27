@@ -3,6 +3,7 @@ import {createInterface} from 'node:readline';
 import {readFile,stat} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createDashboard} from '../dashboard/create.js';
+import {exportRunTemplate} from './templates.js';
 import {SessionClient} from './client.js';
 
 const args=process.argv.slice(2);
@@ -42,10 +43,24 @@ if(args.includes('--help')||args.includes('-h')){
   const run=await client.api('/runs','POST',config),path='/runs/'+run.id;
   console.log('準備できました。まず demo でサンプルを生成し、check → ingest の順に進めます。');
   while(!abort.signal.aborted){
-   const command=await ask('\ndemo / upload / config / check / ingest / status / stop / reparse / query / dashboard / kibana / quit','status');
+   const command=await ask('\ninit / demo / upload / template / config / check / ingest / status / stop / reparse / query / dashboard / kibana / quit','status');
    if(command==='quit')break;
    try{
-    if(command==='demo'){
+    if(command==='init'){
+     const current=await client.api(path),metadata={...current.config.metadata};
+     const format=await ask('ログ形式: pipe-v1 / common-v1',metadata.format);
+     if(!['pipe-v1','common-v1'].includes(format))throw new Error('INVALID_FORMAT');
+     metadata.format=format;
+     metadata.duration_unit=format==='common-v1'?'none':await ask('処理時間の単位: ns / us / ms / s','us');
+     if(!['none','ns','us','ms','s'].includes(metadata.duration_unit))throw new Error('INVALID_DURATION_UNIT');
+     for(const [key,label] of [['service_name','サービス名'],['service_version','サービスのバージョン'],['environment','環境名'],['host_name','サーバー名']])metadata[key!]=await ask(label!,metadata[key!]);
+     showRun(await client.api(path+'/config','PUT',{...current.config,metadata}));
+     console.log('設定を更新しました。ログを用意し、checkで再検証してください。');
+    }else if(command==='template'){
+     const file=await ask('現在のParser・Mapping・metadataを保存する新しいファイルのパス','visulia-config.json');
+     await exportRunTemplate(file,await client.api(path));
+     console.log('設定テンプレートを保存しました。編集後、configで読み込み、checkまたはreparseを実行してください。');
+    }else if(command==='demo'){
      const scenario=await ask('normal / errors / slow / mixed','mixed');
      const count=Number(await ask('リクエスト数（1〜1800）','20'));
      const rate=Number(await ask('1秒あたりのリクエスト数（1〜5）','2'));
@@ -88,7 +103,19 @@ if(args.includes('--help')||args.includes('-h')){
 }
 function safeError(error:unknown){
  const message=error instanceof Error?error.message:'';
- return /^[A-Z][A-Z0-9_]{0,79}$/.test(message)?message:'OPERATION_FAILED';
+ const hints:Record<string,string>={
+  RUN_ACTIVE:'生成または投入が実行中です。stopしてから変更してください。',
+  CHECK_REQUIRED:'現在の設定とログをcheckで検証してから実行してください。',
+  REPARSE_REQUIRED:'既存データと設定が異なります。reparseで再解析してください。',
+  LOGS_REQUIRED:'先にdemoでログを生成するか、uploadでファイルを送信してください。',
+  CAPACITY:'デモ環境の利用枠が埋まっています。時間をおいて接続してください。',
+  COOLDOWN:'直前に環境を作成しました。1分ほど待って接続してください。',
+  TEMPLATE_EXISTS:'同名のファイルがあります。別の保存先を指定してください。',
+  INVALID_CONFIG:'設定を適用できませんでした。metadata・Parser・Mappingを確認してください。',
+  VECTOR_EXECUTION_FAILED:'Parserの実行に失敗しました。templateで設定を取得して構文を確認してください。',
+  INVALID_DEMO:'デモにはpipe-v1・usの設定と、指定範囲内の件数・レートが必要です。',
+ };
+ return Object.hasOwn(hints,message)?hints[message]!: /^[A-Z][A-Z0-9_]{0,79}$/.test(message)?message:'OPERATION_FAILED';
 }
 
 function showRun(result:any){console.log(JSON.stringify({state:result.state,bytes:result.bytes,check:result.check,demo:result.demo},null,2));}

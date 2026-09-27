@@ -31,3 +31,9 @@ test('browser link validation rejects a server response pointing to another orig
  const client=new SessionClient('https://demo.example',(async()=>Response.json(++calls===1?{id,token}:{url:'https://other.example/#ticket=secret'})) as typeof fetch);
  await client.create();await assert.rejects(client.browserLink(),/INVALID_RESPONSE/);await client.close();
 });
+test('CLI exposes only known structured error codes, never arbitrary server error text',async()=>{
+ const known=new SessionClient('https://demo.example',(async()=>Response.json({error:'CAPACITY'},{status:503})) as typeof fetch);
+ await assert.rejects(known.create(),/CAPACITY/);
+ const unknown=new SessionClient('https://demo.example',(async()=>Response.json({error:'SECRET_SESSION_TOKEN'},{status:503})) as typeof fetch);
+ await assert.rejects(unknown.create(),error=>error instanceof Error&&error.message==='SERVER_ERROR_503');
+});
