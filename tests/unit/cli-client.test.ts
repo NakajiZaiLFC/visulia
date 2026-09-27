@@ -6,7 +6,7 @@ test('CLI client confines credentials to its server and session and revokes on c
  const calls:{url:string;method:string;auth:string|null}[]=[];
  const fetcher=(async(input:RequestInfo|URL,init?:RequestInit)=>{
   calls.push({url:String(input),method:init?.method??'GET',auth:new Headers(init?.headers).get('authorization')});
-  assert.equal(init?.redirect,'error');
+  assert.equal(init?.redirect,'error');assert.equal(new Headers(init?.headers).get('kbn-xsrf'),'visulia');
   return Response.json(calls.length===1?{id,token,heartbeatSeconds:30}:{state:'deleted'});
  }) as typeof fetch;
  const client=new SessionClient('https://demo.example',fetcher);

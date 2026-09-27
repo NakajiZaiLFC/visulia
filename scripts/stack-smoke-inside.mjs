@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
+import {createDashboard} from '/opt/visulia/dist/src/dashboard/create.js';
 const base='http://127.0.0.1:8081';
 const authorization='Bearer '+process.env.VISULIA_AGENT_TOKEN;
 async function api(path,method='GET',body){
@@ -50,9 +51,11 @@ try{
  assert.equal(lines.length,8,'health requests must not appear in access logs');
  await api(runPath+'/stop','POST');
  await api(runPath+'/reparse','POST');await delivered(8);
+ const dashboard=await createDashboard(run.id,api);
+ assert.equal(typeof dashboard.id,'string');
  const created=await api(credentials.kibanaPath+'/api/data_views/data_view','POST',{data_view:{title:index,name:'VISULIA smoke',timeFieldName:'@timestamp'}});
  assert.equal(typeof created.data_view?.id,'string');
  const loaded=await api(credentials.kibanaPath+'/api/data_views/data_view/'+encodeURIComponent(created.data_view.id));
  assert.equal(loaded.data_view.title,index);
- console.log(JSON.stringify({actualTomEERequests:8,parsedDocuments:8,continuousIngest:true,reparse:true,esqlStatusCounts:[[200,4],[404,2],[500,2]],kibanaDataView:true}));
+ console.log(JSON.stringify({actualTomEERequests:8,parsedDocuments:8,continuousIngest:true,reparse:true,esqlStatusCounts:[[200,4],[404,2],[500,2]],kibanaDataView:true,dashboardSaved:dashboard.id}));
 }finally{await api(runPath+'/stop','POST');}

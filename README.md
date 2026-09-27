@@ -27,11 +27,11 @@ Cloudflare向けの制御処理はworkerdで検証しています。Container本
 Node.js 24以上で、ビルド後に `node dist/src/cli/main.js --server https://接続先` を実行します。
 `npm pack`したパッケージをインストールすると、実行名は `visulia` です。npmには未公開です。
 
-メニューは `demo / upload / config / check / ingest / status / stop / reparse / query / kibana / quit`。
+メニューは `demo / upload / config / check / ingest / status / stop / reparse / query / dashboard / kibana / quit`。
 まずdemo生成完了をstatusで確認し、check、ingestの順に進みます。投入中にもdemoを追加生成できます。
 configはmetadata・parser・mappingを含むJSONを読み込みます。uploadは選んだファイルの送信確認後に実行します。
 接続用トークンはメモリだけで保持し、終了時に専用環境の削除を要求します。
-`kibana`で60秒・1回限りのブラウザ接続リンクを発行できます。実ブラウザでの動作確認、Dashboard生成と自己ホスト導入ガイドはまだ実装中です。
+`kibana`で60秒・1回限りのブラウザ接続リンクを発行できます。`dashboard`はES|QLを検証して新しいDashboardを作成する候補実装です。実機の保存・描画確認と自己ホスト導入ガイドはまだ完了していません。
 
 ## 開発用の検証
 

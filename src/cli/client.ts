@@ -9,7 +9,7 @@ export class SessionClient {
   this.server=url.origin;
  }
  private async request(path:string,method:string,body?:unknown,cleanup=false):Promise<any>{
-  const headers=new Headers();if(this.#session)headers.set('authorization','Bearer '+this.#session.token);
+  const headers=new Headers({'kbn-xsrf':'visulia'});if(this.#session)headers.set('authorization','Bearer '+this.#session.token);
   let content:BodyInit|undefined;
   if(body instanceof Uint8Array){headers.set('content-type','application/octet-stream');content=body as BodyInit;}
   else if(body!==undefined){headers.set('content-type','application/json');content=JSON.stringify(body);}
@@ -39,12 +39,13 @@ export class SessionClient {
   if(!path.startsWith('/')||path.startsWith('//')||/[\\#\x00-\x20]/.test(path)||/%(?:2e|2f|5c)/i.test(path)||path.split(/[/?]/).some(part=>part==='..'||part==='.'))throw new Error('INVALID_PATH');
   return this.request(this.path()+'/api'+path,method,body);
  }
- async browserLink():Promise<string>{
+ async browserLink(dashboardId?:string):Promise<string>{
+  if(dashboardId!==undefined&&!/^[A-Za-z0-9_-]{1,128}$/.test(dashboardId))throw new Error('INVALID_DASHBOARD');
   const path=this.path(),id=this.#session!.id;
   const response=await this.request(path+'/browser','POST');
   let url;try{url=new URL(response.url);}catch{throw new Error('INVALID_RESPONSE');}
   if(url.origin!==this.server||url.username||url.password||url.pathname!==`/s/${id}/open`||url.search||!/^#ticket=[A-Za-z0-9_-]{43}$/.test(url.hash))throw new Error('INVALID_RESPONSE');
-  return url.href;
+  return url.href+(dashboardId?'&dashboard='+dashboardId:'');
  }
  async close(){
   if(this.#timer){clearInterval(this.#timer);this.#timer=undefined;}

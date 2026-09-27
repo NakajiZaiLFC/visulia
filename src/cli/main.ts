@@ -2,6 +2,7 @@
 import {createInterface} from 'node:readline';
 import {readFile,stat} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
+import {createDashboard} from '../dashboard/create.js';
 import {SessionClient} from './client.js';
 
 const args=process.argv.slice(2);
@@ -41,7 +42,7 @@ if(args.includes('--help')||args.includes('-h')){
   const run=await client.api('/runs','POST',config),path='/runs/'+run.id;
   console.log('準備できました。まず demo でサンプルを生成し、check → ingest の順に進めます。');
   while(!abort.signal.aborted){
-   const command=await ask('\ndemo / upload / config / check / ingest / status / stop / reparse / query / kibana / quit','status');
+   const command=await ask('\ndemo / upload / config / check / ingest / status / stop / reparse / query / dashboard / kibana / quit','status');
    if(command==='quit')break;
    try{
     if(command==='demo'){
@@ -63,6 +64,10 @@ if(args.includes('--help')||args.includes('-h')){
      showRun(await client.api(path+'/'+command,'POST'));
     }else if(command==='status'){
      const result=await client.api(path);console.log(JSON.stringify({state:result.state,bytes:result.bytes,check:result.check,demo:result.demo},null,2));
+    }else if(command==='dashboard'){
+     console.log('クエリを検証し、新しいDashboardを作成しています…');
+     const result=await createDashboard(run.id,client.api.bind(client));
+     console.log('Dashboardの保存を確認しました。60秒以内に開いてください。\n'+await client.browserLink(result.id));
     }else if(command==='kibana'){
      console.log('60秒以内にこのリンクをブラウザで開いてください。CLIを終了すると環境は削除されます。\n'+await client.browserLink());
     }else if(command==='query'){
