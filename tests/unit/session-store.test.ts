@@ -55,3 +55,71 @@ test('corrupt or contradictory stored data fails closed without resetting databa
     }
   } finally { raw.close(); store.close(); }
 });
+
+import { SessionError } from '../../src/session/types.js';
+import { beginClose, finishClose } from '../../src/session/lifecycle.js';
+const code = (expected: string) => (error: unknown) => error instanceof SessionError && error.code === expected;
+
+test('a second connection cannot resurrect a closed session from a stale snapshot', t => {
+  const file = tempDb(t); const token = issueToken();
+  const a = new SessionStore(file); const b = new SessionStore(file);
+  try {
+    a.insert(createSession({id:'a', tokenHash:hashToken(token), now:0}));
+    const stale = b.get('a');
+    a.requestClose('a', token, 1);
+    assert.throws(() => b.heartbeat('a', token, 2), code('UNAUTHORIZED'));
+    assert.equal(stale?.state, 'provisioning');
+    assert.equal(b.get('a')?.state, 'closing');
+  } finally { a.close(); b.close(); }
+  const reopened = new SessionStore(file);
+  try { assert.throws(() => reopened.heartbeat('a', token, 3), code('UNAUTHORIZED')); }
+  finally { reopened.close(); }
+});
+
+test('unauthorized and expired requests do not change persisted state', t => {
+  const store = new SessionStore(tempDb(t)); const token = issueToken();
+  const value = createSession({id:'a', tokenHash:hashToken(token), now:0});
+  try {
+    store.insert(value);
+    for (const id of ['a', 'missing']) {
+      assert.throws(() => store.heartbeat(id, issueToken(), 1), code('UNAUTHORIZED'));
+      assert.throws(() => store.requestClose(id, issueToken(), 1), code('UNAUTHORIZED'));
+    }
+    assert.throws(() => store.heartbeat('a', token, 300_000), code('EXPIRED'));
+    assert.throws(() => store.requestClose('a', token, 300_000), code('EXPIRED'));
+    assert.deepEqual(store.get('a'), value);
+    const updated = store.heartbeat('a', token, 299_999);
+    assert.equal(updated.idleExpiresAt, 599_999);
+    assert.deepEqual(store.get('a'), updated);
+  } finally { store.close(); }
+});
+
+test('claim changes only expired and retryable sessions, preserving the first reason', t => {
+  const store = new SessionStore(tempDb(t));
+  const a = session('a'); const b = session('b', 100_000);
+  try {
+    store.insert(a); store.insert(b);
+    store.insert(finishClose(beginClose(session('c'), 'requested'), false));
+    store.insert(finishClose(beginClose(session('d'), 'requested'), true));
+    assert.deepEqual(store.claimExpired(100_001).map(s => s.id), ['c']);
+    assert.deepEqual(store.get('a'), a);
+    const claimed = store.claimExpired(300_000);
+    assert.deepEqual(claimed.map(s => [s.id, s.state, s.closeReason]),
+      [['a','closing','idle'], ['c','closing','requested']]);
+    assert.deepEqual(store.get('b'), b);
+    assert.equal(store.get('d')?.state, 'deleted');
+    assert.throws(() => store.claimExpired(NaN), code('INVALID_INPUT'));
+  } finally { store.close(); }
+});
+
+test('batch claim rolls back earlier changes if a later database update fails', t => {
+  const file = tempDb(t); const store = new SessionStore(file); const raw = new DatabaseSync(file);
+  try {
+    const a = session('a'); const b = session('b'); store.insert(a); store.insert(b);
+    raw.exec("CREATE TRIGGER fail_b BEFORE UPDATE ON sessions WHEN OLD.id='b' BEGIN SELECT RAISE(ABORT,'simulated failure'); END;");
+    assert.throws(() => store.claimExpired(300_000), /simulated failure/);
+    assert.deepEqual(store.get('a'), a); assert.deepEqual(store.get('b'), b);
+    raw.exec('DROP TRIGGER fail_b');
+    assert.deepEqual(store.claimExpired(300_000).map(s => s.id), ['a','b']);
+  } finally { raw.close(); store.close(); }
+});
