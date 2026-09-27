@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdir,writeFile,readFile,rename,rm,appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import type {CheckInput,CheckResult} from '../pipeline/check.js';
+import {decodeLogs} from '../pipeline/input.js';
 import {createPipeline} from '../pipeline/config.js';
 export interface RunConfig {metadata:Record<string,string>;parser:string;mapping:unknown;}
 export interface RunIO {check(input:CheckInput):Promise<CheckResult>;probe():Promise<void>;createIndex(name:string,mapping:unknown):Promise<void>;deleteIndex(name:string):Promise<void>;start(path:string,onExit:()=>void):Promise<()=>Promise<void>>;}
@@ -70,24 +71,17 @@ export class RunManager {
  });}
  async upload(id:string,bytes:Uint8Array){return this.serial(async()=>{
   const run=this.find(id);this.editable(run);
-  const lines=this.decode(bytes),normalized=Buffer.from(lines.length?lines.join("\n")+"\n":"");
+  const lines=decodeLogs(bytes),normalized=Buffer.from(lines.length?lines.join("\n")+"\n":"");
   this.invalidate(run);
   const directory=this.directory(run),temporary=join(directory,'input','.upload.tmp');
   await writeFile(join(directory,'source-upload.bin'),bytes,{mode:0o600});
   await writeFile(temporary,normalized,{mode:0o600});await rename(temporary,join(directory,'input','upload.log'));
   run.bytes=normalized.byteLength;return this.snapshot(run);
  });}
- private decode(bytes:Uint8Array):string[]{
-  if(bytes.byteLength>10*1024*1024)throw new Error('INVALID_LOG_INPUT');
-  let text:string;try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw new Error('INVALID_LOG_INPUT');}
-  const lines=text.split('\n');if(lines.at(-1)==='')lines.pop();
-  const result=lines.map(line=>line.endsWith('\r')?line.slice(0,-1):line);
-  if(result.length>20000||result.some(line=>Buffer.byteLength(line)>65536))throw new Error('INVALID_LOG_INPUT');return result;
- }
  private async verify(run:Run){
   this.editable(run);run.state='checking';delete run.checkedRevision;delete run.check;
   try{
-   const lines=this.decode(await readFile(join(this.directory(run),'input','upload.log')));
+   const lines=decodeLogs(await readFile(join(this.directory(run),'input','upload.log')));
    if(!lines.length)throw new Error('INVALID_LOG_INPUT');
    await this.options.io.probe();
    run.check=await this.options.io.check({...run.config,runId:run.id,lines});

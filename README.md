@@ -62,3 +62,9 @@ Cloudflareでの構成は`docs/architecture/cloudflare.md`に記載していま�
 ログ形式・時間単位・Mappingの編集範囲・配信保証は`docs/pipeline-contract.md`、実Vectorによる検証は`docs/evidence/2026-09-27-vector-pipeline.md`を参照してください。
 
 実行イメージとリモート検証の手順は`docs/runtime-image.md`を参照してください。
+
+### ローカルでの投入前検証
+
+`visulia check --offline --config visulia-config.json --logs access.log` は、サーバーに接続せず、ローカルのログをParserとMappingで検証します。設定JSONは対話メニューの`template`で書き出した形式（metadata / parser / mapping）です。結果は件数を含むJSONで返し、不正行や設定エラーがあれば終了コード1になります。元のログは変更しません。
+
+このオフライン操作にはVector実行ファイルが必要です（0.58.0で検証）。PATHにない場合は`--vector /path/to/vector`を指定してください。公開デモの利用にはローカルVectorやDockerは不要です。オフライン検証はElasticsearchの接続・権限・実Mappingの確認を含みません。サーバーでの投入前には改めて`check`を実行します。

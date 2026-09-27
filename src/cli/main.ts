@@ -5,12 +5,19 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {createDashboard} from '../dashboard/create.js';
 import {pullDashboardTemplate,applyDashboardTemplate} from '../dashboard/template.js';
 import {exportRunTemplate,saveTemplateFile} from './templates.js';
+import {offlineCheck} from './offline.js';
 import {SessionClient} from './client.js';
 
 const args=process.argv.slice(2);
 if(args[0]==='start')args.shift();
 if(args.includes('--help')||args.includes('-h')){
- console.log('VISULIA\n使い方: visulia [start] [--server https://デモサーバー]\n接続先は VISULIA_SERVER でも指定できます。\n専用の一時環境でログを解析します。終了時に環境を削除します。');
+ console.log('VISULIA\n使い方: visulia [start] [--server https://デモサーバー]\nオフライン検証: visulia check --offline --config 設定.json --logs アクセス.log [--vector 実行ファイル]\n接続先は VISULIA_SERVER でも指定できます。\n専用の一時環境でログを解析します。終了時に環境を削除します。');
+}else if(args[0]==='check'){
+ const abort=new AbortController();const stop=()=>abort.abort();
+ process.once('SIGINT',stop);process.once('SIGTERM',stop);
+ try{const result=await offlineCheck(args.slice(1),abort.signal);console.log(JSON.stringify(result));if(!result.valid)process.exitCode=1;}
+ catch(error){console.error(safeError(error));process.exitCode=1;}
+ finally{process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);}
 }else if(args.length&&!(args.length===2&&args[0]==='--server')){
  console.error('使い方: visulia [start] [--server https://デモサーバー]');process.exitCode=1;
 }else{
@@ -118,6 +125,7 @@ if(args.includes('--help')||args.includes('-h')){
 function safeError(error:unknown){
  const message=error instanceof Error?error.message:'';
  const hints:Record<string,string>={
+  OFFLINE_USAGE:'使い方: visulia check --offline --config 設定.json --logs アクセス.log [--vector Vector実行ファイル]',
   RUN_ACTIVE:'生成または投入が実行中です。stopしてから変更してください。',
   CHECK_REQUIRED:'現在の設定とログをcheckで検証してから実行してください。',
   REPARSE_REQUIRED:'既存データと設定が異なります。reparseで再解析してください。',
