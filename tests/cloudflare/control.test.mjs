@@ -141,3 +141,37 @@ test('session API forwards only for the ready owner and retains method, query an
  await send(`/v1/sessions/${a.id}`,'DELETE',a.token);
  assert.equal((await send(path,'POST',a.token,{query:'FROM visulia-*'})).status,401);
 });
+
+test('one-use browser tickets create session-scoped cookies and enforce origin and revocation',async t=>{
+ const {mf,send}=await runtime(t);
+ const a=await (await send('/v1/sessions','POST')).json();
+ const b=await (await send('/v1/sessions','POST',undefined,undefined,'192.0.2.2')).json();
+ for(let i=0;i<20;i++)if((await (await send(`/v1/sessions/${a.id}`,'GET',a.token)).json()).state==='ready')break;
+ assert.equal((await send(`/v1/sessions/${a.id}/browser`,'POST',b.token)).status,401);
+ const issued=await send(`/v1/sessions/${a.id}/browser`,'POST',a.token);assert.equal(issued.status,200);
+ const {url}=await issued.json();assert.equal(new URL(url).pathname,`/s/${a.id}/open`);assert.equal(new URL(url).search,'');
+ const ticket=new URLSearchParams(new URL(url).hash.slice(1)).get('ticket');assert(ticket);
+ const exchange=()=>mf.dispatchFetch(`https://visulia.example/s/${a.id}/exchange`,{method:'POST',headers:{origin:'https://visulia.example','content-type':'application/json'},body:JSON.stringify({ticket})});
+ const response=await exchange();assert.equal(response.status,200);
+ const cookie=response.headers.get('set-cookie');assert(cookie.includes('HttpOnly'));assert(cookie.includes('Secure'));assert(cookie.includes('SameSite=Strict'));assert(cookie.includes(`Path=/s/${a.id}/`));
+ assert.equal((await exchange()).status,401);
+ const browser=(id,path='',method='GET',origin='https://visulia.example')=>mf.dispatchFetch(`https://visulia.example/s/${id}/kibana${path}`,{method,headers:{cookie:cookie.split(';')[0],origin}});
+ assert.equal((await browser(a.id)).status,200);
+ assert.equal((await browser(b.id)).status,401);
+ assert.equal((await browser(a.id,'/api/saved_objects','POST','https://evil.example')).status,403);
+ assert.equal((await browser(a.id,'/api/saved_objects','POST')).status,200);
+ await send(`/v1/sessions/${a.id}`,'DELETE',a.token);
+ assert.equal((await browser(a.id)).status,401);
+});
+test('browser links expire, consume only once under concurrency and erase auth on cleanup',async t=>{
+ const {mf,send}=await runtime(t);const a=await (await send('/v1/sessions','POST')).json();
+ for(let i=0;i<20;i++)if((await (await send(`/v1/sessions/${a.id}`,'GET',a.token)).json()).state==='ready')break;
+ const {SESSIONS}=await mf.getBindings(),session=SESSIONS.getByName(a.id);
+ const issue=async()=>new URLSearchParams(new URL((await (await send(`/v1/sessions/${a.id}/browser`,'POST',a.token)).json()).url).hash.slice(1)).get('ticket');
+ const exchange=ticket=>mf.dispatchFetch(`https://visulia.example/s/${a.id}/exchange`,{method:'POST',headers:{origin:'https://visulia.example','content-type':'application/json'},body:JSON.stringify({ticket})});
+ const expired=await issue();await session.expireBrowserTicket();assert.equal((await exchange(expired)).status,401);
+ const ticket=await issue();const responses=await Promise.all([exchange(ticket),exchange(ticket)]);assert.deepEqual(responses.map(r=>r.status).sort(),[200,401]);
+ assert.equal(await session.hasBrowserData(),true);
+ const page=await send(`/s/${a.id}/open`);assert.equal(page.headers.get('referrer-policy'),'no-referrer');assert(page.headers.get('content-security-policy').includes("frame-ancestors 'none'"));assert((await page.text()).includes('history.replaceState'));
+ await send(`/v1/sessions/${a.id}`,'DELETE',a.token);assert.equal(await session.hasBrowserData(),false);
+});

@@ -41,7 +41,7 @@ if(args.includes('--help')||args.includes('-h')){
   const run=await client.api('/runs','POST',config),path='/runs/'+run.id;
   console.log('準備できました。まず demo でサンプルを生成し、check → ingest の順に進めます。');
   while(!abort.signal.aborted){
-   const command=await ask('\ndemo / upload / config / check / ingest / status / stop / reparse / query / quit','status');
+   const command=await ask('\ndemo / upload / config / check / ingest / status / stop / reparse / query / kibana / quit','status');
    if(command==='quit')break;
    try{
     if(command==='demo'){
@@ -63,6 +63,8 @@ if(args.includes('--help')||args.includes('-h')){
      showRun(await client.api(path+'/'+command,'POST'));
     }else if(command==='status'){
      const result=await client.api(path);console.log(JSON.stringify({state:result.state,bytes:result.bytes,check:result.check,demo:result.demo},null,2));
+    }else if(command==='kibana'){
+     console.log('60秒以内にこのリンクをブラウザで開いてください。CLIを終了すると環境は削除されます。\n'+await client.browserLink());
     }else if(command==='query'){
      const query=await ask('ES|QL',`FROM visulia-${run.id} | STATS requests = COUNT(*) BY http.response.status_code`);
      console.log(JSON.stringify(await client.api('/elasticsearch/_query','POST',{query}),null,2));

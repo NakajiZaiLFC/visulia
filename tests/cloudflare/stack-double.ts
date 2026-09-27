@@ -27,6 +27,8 @@ export class TestSession extends SessionController {
     if(s) await this.ctx.storage.put('session',{...s,idleExpiresAt:Date.now()-1});
     await this.alarm();
   }
+  async expireBrowserTicket(){const ticket=await this.ctx.storage.get<{hash:string;expiresAt:number}>('browserTicket');if(ticket)await this.ctx.storage.put('browserTicket',{...ticket,expiresAt:0});}
+  async hasBrowserData(){return Boolean(await this.ctx.storage.get('browserHash'))||Boolean(await this.ctx.storage.get('browserTicket'));}
   async retryCleanup() {await this.alarm();}
   async setProvisioning() {const s=await this.ctx.storage.get<Session>('session');if(s)await this.ctx.storage.put('session',{...s,state:'provisioning'});}
   async hasSessionData() {return Boolean(await this.ctx.storage.get('session'));}

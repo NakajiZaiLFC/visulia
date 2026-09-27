@@ -26,3 +26,8 @@ test('CLI errors do not expose raw upstream bodies or session tokens',async()=>{
  const client=new SessionClient('https://demo.example',(async()=>new Response('secret-token',{status:502})) as typeof fetch);
  await assert.rejects(client.create(),error=>error instanceof Error&&error.message==='SERVER_ERROR_502');
 });
+test('browser link validation rejects a server response pointing to another origin',async()=>{
+ let calls=0;
+ const client=new SessionClient('https://demo.example',(async()=>Response.json(++calls===1?{id,token}:{url:'https://other.example/#ticket=secret'})) as typeof fetch);
+ await client.create();await assert.rejects(client.browserLink(),/INVALID_RESPONSE/);await client.close();
+});

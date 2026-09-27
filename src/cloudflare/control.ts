@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { createSession, authorize, heartbeat, markReady, beginClose, finishClose } from '../session/lifecycle.js';
-import { issueToken, hashToken } from '../session/token.js';
+import {browserLanding,readTicket} from './browser.js';
+import { issueToken, hashToken, matchesToken } from '../session/token.js';
 import { MAX_MS, type Session, type Reason } from '../session/types.js';
 
 interface StackStub {
@@ -96,6 +97,7 @@ export class SessionController extends DurableObject<Env> {
       if(!current) return undefined;
       const closing=beginClose(current,reason);
       await this.ctx.storage.put({session:closing,closed:true});
+      await this.ctx.storage.delete(['browserTicket','browserHash']);
       await this.ctx.storage.setAlarm(Date.now()+30_000);
       return closing;
     });
@@ -129,6 +131,34 @@ export class SessionController extends DurableObject<Env> {
     if(now>=s.idleExpiresAt) return this.close('idle');
     await this.ctx.storage.setAlarm(Math.min(s.idleExpiresAt,s.maxExpiresAt));
   }
+  async browser(request:Request,exchange:boolean):Promise<Response>{
+    const url=new URL(request.url);
+    if((exchange||!['GET','HEAD'].includes(request.method))&&request.headers.get('origin')!==url.origin)return json({error:'ORIGIN_DENIED'},403);
+    const ticket=exchange?await readTicket(request):undefined;
+    const result=await this.ctx.blockConcurrencyWhile(async()=>{
+      const s=await this.ctx.storage.get<Session>('session');
+      if(!s||s.state!=='ready'||Date.now()>=Math.min(s.idleExpiresAt,s.maxExpiresAt))return undefined;
+      if(exchange){
+        const saved=await this.ctx.storage.get<{hash:string;expiresAt:number}>('browserTicket');
+        if(!ticket||!saved||Date.now()>=saved.expiresAt||!matchesToken(ticket,saved.hash))return undefined;
+        await this.ctx.storage.delete('browserTicket');
+        const token=issueToken();await this.ctx.storage.put('browserHash',hashToken(token));
+        return {session:s,token};
+      }
+      const cookie=request.headers.get('cookie')?.split(';').map(part=>part.trim()).find(part=>part.startsWith('visulia_'+s.id+'='))?.split('=')[1];
+      const hash=await this.ctx.storage.get<string>('browserHash');
+      if(!cookie||!hash||!matchesToken(cookie,hash))return undefined;
+      return {session:s,token:undefined};
+    });
+    if(!result)return denied();
+    if(await this.env.STACKS.getByName(result.session.id).isStopped()){await this.close('container_stopped');return denied();}
+    if(exchange){
+      const response=json({ready:true});
+      response.headers.set('set-cookie',`visulia_${result.session.id}=${result.token}; Path=/s/${result.session.id}/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.max(0,Math.floor((result.session.maxExpiresAt-Date.now())/1000))}`);
+      return response;
+    }
+    return this.env.STACKS.getByName(result.session.id).proxy(request);
+  }
   async handle(request:Request, action:string):Promise<Response> {
     const token=request.headers.get('authorization')?.replace(/^Bearer /,'')??'';
     const current=await this.ctx.storage.get<Session>('session');
@@ -152,6 +182,17 @@ export class SessionController extends DurableObject<Env> {
       return s;
     });
     if(!authorized) return denied();
+    if(action==='browser'){
+      return this.ctx.blockConcurrencyWhile(async()=>{
+        const s=await this.ctx.storage.get<Session>('session');
+        if(!s)return denied();
+        try{authorize(s,token,Date.now());}catch{return denied();}
+        if(s.state!=='ready')return json({error:'NOT_READY'},409);
+        const ticket=issueToken();
+        await this.ctx.storage.put('browserTicket',{hash:hashToken(ticket),expiresAt:Math.min(Date.now()+60000,s.idleExpiresAt,s.maxExpiresAt)});
+        return json({url:new URL(`/s/${s.id}/open#ticket=${ticket}`,request.url).href,expiresInSeconds:60});
+      });
+    }
     if(action==='proxy') {
       if(authorized.state!=='ready')return json({error:'NOT_READY'},409);
       const response=await this.env.STACKS.getByName(authorized.id).proxy(request);
@@ -194,14 +235,20 @@ export default {
         }
         return json({id:reservation.id,token,heartbeatSeconds:30},201);
       }
-      const match=/^\/v1\/sessions\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(\/heartbeat|\/api\/.*)?$/.exec(path);
+      const browser=/^\/s\/([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})\/(open|exchange|kibana(?:\/.*)?)$/.exec(path);
+      if(browser){
+        if(browser[2]==='open')return request.method==='GET'?browserLanding(browser[1]!):json({error:'METHOD_NOT_ALLOWED'},405);
+        if(browser[2]==='exchange'&&request.method!=='POST')return json({error:'METHOD_NOT_ALLOWED'},405);
+        return await env.SESSIONS.getByName(browser[1]!).browser(request,browser[2]==='exchange');
+      }
+      const match=/^\/v1\/sessions\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(\/heartbeat|\/browser|\/api\/.*)?$/.exec(path);
       if(!match) return json({error:'NOT_FOUND'},404);
       if(match[2]?.startsWith('/api/')) {
         const target=new URL(request.url);
         target.pathname=match[2].slice('/api'.length);
         return await env.SESSIONS.getByName(match[1]!).handle(new Request(target,request),'proxy');
       }
-      const action=match[2]?(request.method==='POST'?'heartbeat':undefined):
+      const action=match[2]?(request.method==='POST'?(match[2]==='/browser'?'browser':'heartbeat'):undefined):
         request.method==='GET'?'status':request.method==='DELETE'?'delete':undefined;
       if(!action) return json({error:'METHOD_NOT_ALLOWED'},405);
       return await env.SESSIONS.getByName(match[1]!).handle(request,action);
