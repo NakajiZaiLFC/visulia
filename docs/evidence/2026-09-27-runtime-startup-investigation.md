@@ -15,3 +15,9 @@ Tests first failed for missing JVM resolver configuration, then passed with the 
 Sources:
 - https://raw.githubusercontent.com/apache/logging-log4j2/rel/2.26.1/log4j-core/src/main/java/org/apache/logging/log4j/core/util/NetUtils.java
 - https://raw.githubusercontent.com/openjdk/jdk25u/master/src/java.base/share/classes/java/net/InetAddress.java
+
+## Follow-up: hostname fix verified, security provisioning still failing
+
+Run 36299582639 passed actual Elasticsearch startup and the authenticated cluster-health gate with the local JVM resolver. Its subsequent security provisioning request failed before Kibana/TomEE launch. The diagnostic reproduction also reached Elasticsearch security-index initialization. This confirms the hostname fix, not the complete runtime.
+
+The next diagnostic adds fixed operation/status/timeout markers and captures credential-redacted security error responses only in the fresh CI reproduction. Do not infer an HTTP permission rejection from the generic `security-failed` marker: transport/timeout and API rejection remain distinct until that output is obtained. `gh run view --log-failed` returned an incomplete fragment for this run; the full job log was retrieved through the jobs/logs API for the evidence above.
