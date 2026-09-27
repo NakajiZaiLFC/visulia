@@ -1,5 +1,8 @@
 name: Runtime image verification
 on:
+  push:
+    paths:
+      - '.github/workflows/runtime-build.yml'
   workflow_dispatch:
 permissions:
   contents: read
