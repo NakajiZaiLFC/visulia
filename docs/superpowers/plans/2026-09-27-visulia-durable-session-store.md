@@ -1,6 +1,6 @@
 # VISULIA Durable Session Store Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** サーバー再起動後もセッション状態と所有リソースを追跡でき、heartbeatと終了処理が競合しても終了状態を復活させない永続ストアを作る。
 
@@ -48,7 +48,7 @@ export class SessionStore {
 }
 ```
 
-- [ ] 次のテストを作り、未実装の失敗を確認する。
+- [x] 次のテストを作り、未実装の失敗を確認する。
 
 ```ts
 test('reopen preserves sessions and duplicate IDs never overwrite', () => {
@@ -70,7 +70,7 @@ test('reopen preserves sessions and duplicate IDs never overwrite', () => {
 });
 ```
 
-- [ ] `DatabaseSync`を開き、foreign_keysを有効化、busy_timeoutを5000msに設定する。管理者専用ディレクトリにDBを置き、ファイル権限を0600にする。セッションは下記テーブルへパラメータでbindして挿入する。
+- [x] `DatabaseSync`を開き、foreign_keysを有効化、busy_timeoutを5000msに設定する。管理者専用ディレクトリにDBを置き、ファイル権限を0600にする。セッションは下記テーブルへパラメータでbindして挿入する。
 
 ```sql
 CREATE TABLE IF NOT EXISTS sessions (
@@ -79,8 +79,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 ) STRICT;
 ```
 
-- [ ] payloadはSessionのJSONのみとし、読取り時に型、state、数値のsafe integer、期限の順序を検証する。不正な保存データはエラーにし、暗黙に初期化しない。`INSERT OR REPLACE`を使用しない。
-- [ ] 作成時のDB modeをstatで検証し、破損JSONを挿入した場合getが失敗するテストを追加する。`npm test`、`npm run check`を実行しcommitする。
+- [x] payloadはSessionのJSONのみとし、読取り時に型、state、数値のsafe integer、期限の順序を検証する。不正な保存データはエラーにし、暗黙に初期化しない。`INSERT OR REPLACE`を使用しない。
+- [x] 作成時のDB modeをstatで検証し、破損JSONを挿入した場合getが失敗するテストを追加する。`npm test`、`npm run check`を実行しcommitする。
 
 ### Task 2: heartbeatと終了を排他的に更新
 
@@ -92,7 +92,7 @@ requestClose(id: string, token: string, now: number): Session;
 claimExpired(now: number): Session[];
 ```
 
-- [ ] 次のシナリオを一時ファイルDBへの2接続で試験する。
+- [x] 次のシナリオを一時ファイルDBへの2接続で試験する。
 
 ```ts
 const a = new SessionStore(file);
@@ -107,7 +107,7 @@ try {
 } finally { a.close(); b.close(); }
 ```
 
-- [ ] 未実装の失敗を確認後、各更新を次の構造で実装する。
+- [x] 未実装の失敗を確認後、各更新を次の構造で実装する。
 
 ```ts
 db.exec('BEGIN IMMEDIATE');
@@ -122,9 +122,9 @@ try {
 }
 ```
 
-- [ ] requestCloseはlive所有者にだけ許可。見つからないIDはUNAUTHORIZEDとして返し、他人のIDの存在を漏らさない。認証失敗や期限切れでDBを書き換えない。
-- [ ] claimExpiredは同一transactionで読取り・期限判定・closingへの変更を行う。cleanup_failedもclosingへ戻して回収対象として返す。deletedは返さない。claimは管理者内部用で公開HTTPに直接公開しない。
-- [ ] 別トークン拒否、期限ちょうどのheartbeat拒否、期限前claimで未変更、終了後再オープンでも拒否、transaction中例外のrollbackをテストする。全テストと型検査後commitする。
+- [x] requestCloseはlive所有者にだけ許可。見つからないIDはUNAUTHORIZEDとして返し、他人のIDの存在を漏らさない。認証失敗や期限切れでDBを書き換えない。
+- [x] claimExpiredは同一transactionで読取り・期限判定・closingへの変更を行う。cleanup_failedもclosingへ戻して回収対象として返す。deletedは返さない。claimは管理者内部用で公開HTTPに直接公開しない。
+- [x] 別トークン拒否、期限ちょうどのheartbeat拒否、期限前claimで未変更、終了後再オープンでも拒否、transaction中例外のrollbackをテストする。全テストと型検査後commitする。
 
 ### Task 3: 副作用より先に所有リソースを記録
 
@@ -148,8 +148,8 @@ export class ResourceStore {
 // SessionStore: reportCleanup(id: string, success: boolean): Session
 ```
 
-- [ ] 一時DBでリソースをplannedとして記録し、作成完了前にclose/reopenするテストを書く。再オープンしたpendingにplannedが残ること、BのmarkRemovedでAのリソースが変化しないことをassertする。
-- [ ] 未実装の失敗を確認し、次のテーブルを実装する。
+- [x] 一時DBでリソースをplannedとして記録し、作成完了前にclose/reopenするテストを書く。再オープンしたpendingにplannedが残ること、BのmarkRemovedでAのリソースが変化しないことをassertする。
+- [x] 未実装の失敗を確認し、次のテーブルを実装する。
 
 ```sql
 CREATE TABLE IF NOT EXISTS resources (
@@ -161,16 +161,18 @@ CREATE TABLE IF NOT EXISTS resources (
 ) STRICT;
 ```
 
-- [ ] リソース名はサーバーが生成し`visulia-<sessionId>-`で始まる値に限定する。kindは固定列挙。絶対パス・ユーザー入力をリソース名に使わない。ディレクトリ操作時の実パスは後続providerが管理rootから組み立てる。
-- [ ] planはactiveセッションにのみ許可。同じ所有者・同じ内容の再実行は変更なし、他所有者やremovedからの再作成は拒否。markCreatedはplannedからだけ許可、removedを復活させない。markRemovedはplanned/createdからremoved、再実行は変更なし。すべてWHEREにsession_idを含める。
-- [ ] reportCleanupは同じtransaction内でpendingが空であることを確認してからfinishClose(..., true)する。失敗時はfinishClose(..., false)。pendingが残れば成功通知を拒否する。
-- [ ] `reportCleanup(id,true)`をpendingありで呼ぶとdeletedにならないこと、plannedのままでもmarkRemovedできること、最後の削除後にのみdeletedへ移ることを試験する。全テストと型検査後commitする。
+- [x] リソース名はサーバーが生成し`visulia-<sessionId>-`で始まる値に限定する。kindは固定列挙。絶対パス・ユーザー入力をリソース名に使わない。ディレクトリ操作時の実パスは後続providerが管理rootから組み立てる。
+- [x] planはactiveセッションにのみ許可。同じ所有者・同じ内容の再実行は変更なし、他所有者やremovedからの再作成は拒否。markCreatedはplannedからだけ許可、removedを復活させない。markRemovedはplanned/createdからremoved、再実行は変更なし。すべてWHEREにsession_idを含める。
+- [x] reportCleanupは同じtransaction内でpendingが空であることを確認してからfinishClose(..., true)する。失敗時はfinishClose(..., false)。pendingが残れば成功通知を拒否する。
+- [x] `reportCleanup(id,true)`をpendingありで呼ぶとdeletedにならないこと、plannedのままでもmarkRemovedできること、最後の削除後にのみdeletedへ移ることを試験する。全テストと型検査後commitする。
 
 ## 完了条件と次の実装
 
-- [ ] 実SQLiteの再オープンと2接続の状態競合をテストした結果を記録する。
-- [ ] DBに平文トークンやログ本文を保存しないことを確認する。
-- [ ] HTTPサーバー、環境発行provider、実サービスでの回収は別の次工程として明記する。
-- [ ] providerはplan→create→markCreated、終了は認証失効→remove→markRemoved→reportCleanupの順を使う。実処理をDB transaction中にawaitしない。
+- [x] 実SQLiteの再オープンと2接続の状態競合をテストした結果を記録する。
+- [x] DBに平文トークンやログ本文を保存しないことを確認する。
+- [x] HTTPサーバー、環境発行provider、実サービスでの回収は別の次工程として明記する。
+- [x] providerはplan→create→markCreated、終了は認証失効→remove→markRemoved→reportCleanupの順を使う。実処理をDB transaction中にawaitしない。
 
 参考: https://nodejs.org/api/sqlite.html 。`node:sqlite`の安定度はrelease candidateであり、実装時に使用中NodeでのAPI可用性を確認する。
+
+実装・検証記録: `docs/evidence/2026-09-27-durable-session-store.md`。provider向け契約: `docs/session-store-contract.md`。
