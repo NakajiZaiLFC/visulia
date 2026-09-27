@@ -8,6 +8,6 @@ test('runtime entrypoint rejects absent identity or invalid internal token befor
   assert.equal(result.error,undefined);
   assert.equal(result.status,1);
   assert.equal(result.stdout,'');
-  assert.equal(result.stderr.trim(),'RUNTIME_START_FAILED');
+  assert.equal(result.stderr.trim(),'RUNTIME_START_FAILED\nRUNTIME_PHASE:identity');
  }
 });

@@ -57,3 +57,17 @@ jobs:
         run: docker build -t visulia-stack:build -f containers/stack/Dockerfile .
       - name: Actual TomEE, Vector, Elasticsearch and Kibana smoke test
         run: node scripts/test-stack.mjs
+      - name: Archive verified runtime for registry upload
+        run: |
+          docker builder prune --all --force
+          docker save visulia-stack:build | gzip -1 > "$RUNNER_TEMP/visulia-stack.tar.gz"
+          cd "$RUNNER_TEMP"
+          sha256sum visulia-stack.tar.gz > visulia-stack.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: visulia-runtime-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/visulia-stack.tar.gz
+            ${{ runner.temp }}/visulia-stack.sha256
+          compression-level: 0
+          retention-days: 1

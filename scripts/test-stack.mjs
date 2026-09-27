@@ -22,6 +22,13 @@ try{
  if(!ready)throw new Error('STACK_READINESS_TIMEOUT');
  const {stdout}=await docker(['exec',name,'node','--input-type=module','-e',await readFile(new URL('./stack-smoke-inside.mjs',import.meta.url),'utf8')],180000);
  process.stdout.write(stdout);
+}catch(error){
+ // Only our fixed diagnostic codes are exposed, never raw service logs/configuration.
+ try{
+  const {stdout,stderr}=await docker(['logs',name]);
+  for(const line of (stdout+'\n'+stderr).split('\n'))if(/^RUNTIME_(?:START_FAILED|ERROR:[A-Z]+|PHASE:[a-z]+|BOOTSTRAP:[a-z0-9:-]+)$/.test(line))console.error(line);
+ }catch{}
+ throw error;
 }finally{
  {
   // run may create the container and then reject. Cleanup does not depend on CLI success.

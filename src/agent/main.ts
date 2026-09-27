@@ -13,6 +13,7 @@ import {NodeRunIO} from './run-io.js';
 process.umask(0o077);
 const services=new Services();
 let requestedStop=false;
+let phase="identity";
 const stop=()=>{requestedStop=true;void services.stop();};
 process.once('SIGTERM',stop);process.once('SIGINT',stop);
 // Independent backstops if the control plane or a service health check stalls.
@@ -22,14 +23,19 @@ try{
  const config=createRuntimeConfig(process.env.VISULIA_SESSION_ID??'');
  const runs=new RunManager({root:'/work/runs',demo:generateCapturedDemo,signal:services.signal,elasticsearch:{url:'http://127.0.0.1:9200',username:config.secrets.username,password:config.secrets.password},io:new NodeRunIO(config.secrets.username,config.secrets.password,services.signal)});
  const handler=createAgentHandler(config,process.env.VISULIA_AGENT_TOKEN??'',services.signal,fetch,runs);
+ phase="files";
  await prepareRuntime();
+ phase="bootstrap";
  await bootstrap(config,new NodeBootstrapIO(services));
+ phase="listen";
  const server=await serveAgent(handler,services.signal);
  clearTimeout(startupDeadline);
  if(server.listening)await once(server,'close');
  if(!requestedStop)process.exitCode=1;
-}catch{
- if(!requestedStop){console.error('RUNTIME_START_FAILED');process.exitCode=1;}
+}catch(error){
+ const code=(error as NodeJS.ErrnoException)?.code;
+ if(typeof code==='string'&&['ENOENT','EACCES','EEXIST','EPERM','ENOSPC'].includes(code))console.error('RUNTIME_ERROR:'+code);
+ if(!requestedStop){console.error('RUNTIME_START_FAILED');console.error('RUNTIME_PHASE:'+phase);process.exitCode=1;}
 }finally{
  clearTimeout(startupDeadline);clearTimeout(lifetimeDeadline);
  await services.stop();
