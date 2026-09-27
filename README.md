@@ -2,7 +2,7 @@
 
 VISULIAは、npmで導入する対話型CLIから一時的なログ解析環境を利用するプロジェクトです。作者の公開サーバー上で、利用者ごとにElasticsearch・Kibana・Vectorの環境を割り当て、デモログまたは持ち込みログを解析する構想です。
 
-**現在は開発初期です。npmには未公開で、CLI・公開サーバー・Dashboardはまだ利用できません。**
+**現在は開発初期です。npmには未公開で、公開サーバー・Dashboardはまだ利用できません。CLIは開発用接続先で検証中です。**
 
 ## 実装済み
 
@@ -20,7 +20,18 @@ VISULIAは、npmで導入する対話型CLIから一時的なログ解析環境�
 - コンテナ内サービスの起動処理、個別認証情報、停止処理、専用ファイル領域の準備。認証付き管理APIと実行イメージの定義を追加し、リモートでの実サービス検証を準備しています。
 - TomEEデモアプリとアクセスログ設定、デモリクエスト生成処理。実TomEEでの動作確認は未実施です。
 
-Cloudflare向けの制御処理はworkerdで検証しています。Container本体はテスト用の代替実装で検証した段階で、Elasticsearch・Kibanaの実行イメージ、CLI、実環境へのデプロイは未完了です。SQLiteは自己ホスト向けの構成要素であり、Workersでの保存先はDurable Objectsです。
+Cloudflare向けの制御処理はworkerdで検証しています。Container本体はテスト用の代替実装で検証した段階で、Elasticsearch・Kibanaの実行イメージと実環境へのデプロイは未完了です。SQLiteは自己ホスト向けの構成要素であり、Workersでの保存先はDurable Objectsです。
+
+## 開発中のCLI
+
+Node.js 24以上で、ビルド後に `node dist/src/cli/main.js --server https://接続先` を実行します。
+`npm pack`したパッケージをインストールすると、実行名は `visulia` です。npmには未公開です。
+
+メニューは `demo / upload / config / check / ingest / status / stop / reparse / query / quit`。
+まずdemo生成完了をstatusで確認し、check、ingestの順に進みます。投入中にもdemoを追加生成できます。
+configはmetadata・parser・mappingを含むJSONを読み込みます。uploadは選んだファイルの送信確認後に実行します。
+接続用トークンはメモリだけで保持し、終了時に専用環境の削除を要求します。
+Dashboardをブラウザで開く機能と自己ホスト導入ガイドはまだ実装中です。
 
 ## 開発用の検証
 

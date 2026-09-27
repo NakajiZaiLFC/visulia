@@ -10,7 +10,8 @@
     "test:worker": "node --test tests/cloudflare/*.test.mjs",
     "check:worker": "tsc -p tsconfig.worker.json --noEmit",
     "types:worker": "wrangler types --config wrangler.types.jsonc --env-interface CloudflareBindings worker-configuration.d.ts",
-    "test:vector": "npm run build && node scripts/test-vector.mjs && node --test tests/vector/*.test.mjs"
+    "test:vector": "npm run build && node scripts/test-vector.mjs && node --test tests/vector/*.test.mjs",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@types/node": "26.6.3",
@@ -21,5 +22,18 @@
   },
   "dependencies": {
     "@cloudflare/containers": "0.3.7"
+  },
+  "bin": {
+    "visulia": "dist/src/cli/main.js"
+  },
+  "files": [
+    "dist/src",
+    "templates",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=24"
   }
 }

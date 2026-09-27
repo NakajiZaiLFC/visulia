@@ -19,8 +19,32 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run test:worker && npm run check:worker
+      - name: Restore verified Vector build image
+        id: vector-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/visulia-vector-image.tar
+          key: vector-linux-amd64-${{ hashFiles('containers/vector/Dockerfile', 'patches/vector-0.58.0-flush.patch') }}
+      - name: Load reusable Vector image
+        if: steps.vector-cache.outputs.cache-hit == 'true'
+        run: docker load -i "$RUNNER_TEMP/visulia-vector-image.tar"
       - name: Build patched Vector and upstream regression tests
-        run: docker build --build-arg CARGO_BUILD_JOBS=2 -t visulia-vector:build -f containers/vector/Dockerfile .
+        if: steps.vector-cache.outputs.cache-hit != 'true'
+        run: |
+          docker build --build-arg CARGO_BUILD_JOBS=2 -t visulia-vector:build -f containers/vector/Dockerfile .
+          docker save visulia-vector:build -o "$RUNNER_TEMP/visulia-vector-image.tar"
+      - name: Preserve completed Vector build before runtime assembly
+        if: steps.vector-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/visulia-vector-image.tar
+          key: vector-linux-amd64-${{ hashFiles('containers/vector/Dockerfile', 'patches/vector-0.58.0-flush.patch') }}
+      - name: Release compiler intermediates before assembling Elastic images
+        run: |
+          docker builder prune --all --force
+          rm -f "$RUNNER_TEMP/visulia-vector-image.tar"
+          docker system df
+          df -h /
       - name: Exercise patched Vector delivery on Linux
         run: |
           container_id=$(docker create visulia-vector:build)
