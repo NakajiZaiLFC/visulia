@@ -1,7 +1,8 @@
 import {timingSafeEqual} from 'node:crypto';
+import type {RunManager} from './runs.js';
 import type {RuntimeConfig} from './runtime-config.js';
 const json=(body:unknown,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store'}});
-export function createAgentHandler(config:RuntimeConfig,token:string,signal:AbortSignal,fetcher:typeof fetch=fetch):(request:Request)=>Promise<Response>{
+export function createAgentHandler(config:RuntimeConfig,token:string,signal:AbortSignal,fetcher:typeof fetch=fetch,runs?:RunManager):(request:Request)=>Promise<Response>{
  if(!/^[a-f0-9]{64}$/.test(token))throw new Error('INVALID_AGENT_TOKEN');
  const expected=Buffer.from('Bearer '+token);
  const userAuthorization='Basic '+Buffer.from(config.secrets.username+':'+config.secrets.password).toString('base64');
@@ -12,6 +13,33 @@ export function createAgentHandler(config:RuntimeConfig,token:string,signal:Abor
   const url=new URL(request.url);
   if(url.pathname==='/health'&&request.method==='GET')return json({status:'ready'});
   if(url.pathname==='/credentials'&&request.method==='GET')return json({username:config.secrets.username,password:config.secrets.password,kibanaPath:config.basePath});
+  if(runs&&(url.pathname==='/runs'||url.pathname.startsWith('/runs/'))){
+   try{
+    if(url.pathname==='/runs'){
+     if(request.method==='GET')return json({runs:runs.list()});
+     if(request.method==='POST')return json(await runs.create(await request.json()),201);
+     return json({error:'METHOD_NOT_ALLOWED'},405);
+    }
+    const match=/^\/runs\/([a-f0-9-]{36})(?:\/(config|logs|check|ingest|stop|reparse))?$/.exec(url.pathname);
+    if(!match)return json({error:'NOT_FOUND'},404);
+    const id=match[1]!,action=match[2];
+    if(!action&&request.method==='GET')return json(runs.get(id));
+    if(action==='config'&&request.method==='PUT')return json(await runs.update(id,await request.json()));
+    if(action==='logs'&&request.method==='PUT')return json(await runs.upload(id,new Uint8Array(await request.arrayBuffer())));
+    if(request.method==='POST'){
+     if(action==='check')return json(await runs.check(id));
+     if(action==='ingest')return json(await runs.ingest(id),202);
+     if(action==='stop')return json(await runs.stop(id));
+     if(action==='reparse')return json(await runs.reparse(id),202);
+    }
+    return json({error:'METHOD_NOT_ALLOWED'},405);
+   }catch(error){
+    if(error instanceof SyntaxError)return json({error:'INVALID_REQUEST'},400);
+    const code=error instanceof Error?error.message:'';
+    const statuses:Record<string,number>={RUN_NOT_FOUND:404,RUN_CAPACITY:409,RUN_ACTIVE:409,CHECK_REQUIRED:409,REPARSE_REQUIRED:409,INVALID_CONFIG:400,INVALID_LOG_INPUT:400,LOGS_REQUIRED:400,SESSION_STOPPED:410,VECTOR_EXECUTION_FAILED:422,VECTOR_START_FAILED:502,INGEST_EXITED:502,ELASTICSEARCH_FAILED:502};
+    return json({error:Object.hasOwn(statuses,code)?code:'INTERNAL_ERROR'},Object.hasOwn(statuses,code)?statuses[code]:500);
+   }
+  }
   let target:string;
   if(url.pathname.startsWith('/elasticsearch/'))target='http://127.0.0.1:9200'+url.pathname.slice('/elasticsearch'.length)+url.search;
   else if(url.pathname===config.basePath||url.pathname.startsWith(config.basePath+'/'))target='http://127.0.0.1:5601'+url.pathname+url.search;

@@ -1,6 +1,6 @@
 import {spawn,type ChildProcess} from 'node:child_process';
 export interface ServiceSpec {name:string;command:string;args?:string[];cwd?:string;env?:NodeJS.ProcessEnv;}
-export interface Service {completion:Promise<void>;}
+export interface Service {completion:Promise<void>;started:Promise<void>;}
 /** The Linux container owns all descendants. Service output is not forwarded to public logs. */
 export class Services {
  private readonly controller=new AbortController();
@@ -12,6 +12,8 @@ export class Services {
   if(this.stopping)throw new Error('SERVICES_STOPPED');
   if(!/^[a-z][a-z0-9-]{0,31}$/.test(spec.name))throw new Error('INVALID_SERVICE');
   const child=spawn(spec.command,spec.args??[],{cwd:spec.cwd,env:spec.env??process.env,stdio:'ignore',detached:true});
+  const started=new Promise<void>((resolve,reject)=>{child.once('spawn',resolve);child.once('error',()=>reject(new Error(`SERVICE_EXIT:${spec.name}`)));});
+  void started.catch(()=>{});
   const completion=new Promise<void>((resolve,reject)=>{
    let settled=false;
    const finish=()=>{
@@ -31,7 +33,7 @@ export class Services {
   this.children.set(child,completion);
   // Failures are also signalled through signal; a caller need not await every child.
   void completion.catch(()=>{});
-  return {completion};
+  return {completion,started};
  }
  stop():Promise<void>{
   if(this.stopped)return this.stopped;

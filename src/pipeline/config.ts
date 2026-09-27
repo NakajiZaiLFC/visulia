@@ -8,7 +8,7 @@ export interface PipelineOptions {
   mapping:unknown;
   elasticsearch:{url:string;username:string;password:string};
 }
-export function createPipeline(options:PipelineOptions):unknown {
+export function createPipeline(options:PipelineOptions) {
   const {directory,runId,metadata,parser,mapping,elasticsearch}=options;
   if(!/^[a-z0-9][a-z0-9-]{0,63}$/.test(runId) || !isAbsolute(directory) || parser.length>65536)throw new Error('INVALID_CONFIG');
   for(const name of ['format','duration_unit','service_name','service_version','environment','host_name']) {
