@@ -4,6 +4,8 @@
 
 **Goal:** npm導入した利用者が、作者のサーバーに一時解析環境を作り、自分のログと設定で調査でき、終了後に環境を回収できるVISULIAを公開可能にする。
 
+**Deployment update (2026-09-27):** 公開デモの配置はユーザー承認によりWorkers + Containersへ変更。以下のCompose表記は当初案であり、公開デモの現行構成は`docs/architecture/cloudflare.md`を参照する。社内自己ホスト・既存ES/Kibana接続の要求は削除しない。
+
 **Architecture:** CLIはHTTPSで管理APIへ接続する。管理APIが実行セッションごとに認証と専用サービス・ネットワーク・ボリュームを発行する。ES|QLで検索・集計し、Kibanaで編集・描画する。
 
 **Tech Stack:** TypeScript/Node.js、Docker Compose、TomEE、Vector/VRL、Elasticsearch、Kibana。

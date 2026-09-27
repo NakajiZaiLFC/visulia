@@ -20,7 +20,9 @@
 - [ ] Build image in remote CI; validate hosted session isolation, data cleanup and rendered dashboard.
 - [ ] Prepare GitHub/npm release artifacts and verified deployment instructions.
 
-Public demo authentication and deployment authorization are not present yet. No deployment or paid resource is created just by this document. Need an authenticated Cloudflare account, repository/remote CI for image build, and concrete release targets for final live verification/publication.
+The Worker owner-token and browser-ticket paths are implemented and tested under workerd. The user has authorized deployment and renewed Cloudflare OAuth authentication. The currently authenticated account returns `Unauthorized: You do not have access to Cloudflare Containers` and requires Workers Paid. This is an account entitlement prerequisite, separate from authentication. No Cloudflare deployment has succeeded yet. GitHub remote CI is available in the private staging repository; public GitHub/npm release remains pending.
+
+Current evidence: run 36297592703 built the combined image and passed patched Vector delivery checks, but the runtime exited before readiness. Run 36298637793 repeats the live smoke with fixed startup diagnostics and the newer Dashboard/template code. CLI, browser handoff and Dashboard APIs are implemented candidates; the unchecked items above still require live acceptance rather than only local tests. See `../runtime-image.md` and `../evidence/2026-09-27-dashboard-templates.md`.
 
 ## Runtime decisions
 
