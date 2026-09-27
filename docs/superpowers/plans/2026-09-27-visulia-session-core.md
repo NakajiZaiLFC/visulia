@@ -1,6 +1,6 @@
 # VISULIA Session Core Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 一時解析環境の発行単位となるセッションの認証、状態遷移、期限、回収対象判定を独立して検証できるTypeScriptモジュールを作る。
 
@@ -71,8 +71,8 @@ export function hashToken(token: string): string;
 export function matchesToken(token: string, hash: string): boolean;
 ```
 
-- [ ] 開発設定を追加。`private: true`、`type: module`、`build: tsc`、`test: npm run build && node --test dist/tests/unit/*.test.js`、`check: tsc --noEmit`とする。TypeScriptとNode型定義のみ開発依存として追加しlockfileを保存する。`rootDir: .`、`outDir: dist`、`module: NodeNext`、`strict: true`を設定する。
-- [ ] 次のテストを`token.test.ts`へ書く。
+- [x] 開発設定を追加。`private: true`、`type: module`、`build: tsc`、`test: npm run build && node --test dist/tests/unit/*.test.js`、`check: tsc --noEmit`とする。TypeScriptとNode型定義のみ開発依存として追加しlockfileを保存する。`rootDir: .`、`outDir: dist`、`module: NodeNext`、`strict: true`を設定する。
+- [x] 次のテストを`token.test.ts`へ書く。
 
 ```ts
 import test from 'node:test';
@@ -90,15 +90,15 @@ test('token is unique and only its matching hash authenticates', () => {
 });
 ```
 
-- [ ] `npm test`で未実装により失敗することを確認。
-- [ ] 型を上記の通り実装。トークンは`randomBytes(32).toString('base64url')`、hashはSHA-256 hex。照合は形式検査後に`timingSafeEqual`を使う。
+- [x] `npm test`で未実装により失敗することを確認。
+- [x] 型を上記の通り実装。トークンは`randomBytes(32).toString('base64url')`、hashはSHA-256 hex。照合は形式検査後に`timingSafeEqual`を使う。
 
 ```ts
 if (!/^[A-Za-z0-9_-]{43}$/.test(token) || !/^[a-f0-9]{64}$/.test(hash)) return false;
 return timingSafeEqual(Buffer.from(hashToken(token), 'hex'), Buffer.from(hash, 'hex'));
 ```
 
-- [ ] `npm test`と`npm run check`が成功することを確認し、該当ファイルをcommitする（`feat: add session credential primitives`）。
+- [x] `npm test`と`npm run check`が成功することを確認し、該当ファイルをcommitする（`feat: add session credential primitives`）。
 
 ### Task 2: セッション作成、所有権、準備完了、heartbeat
 
@@ -113,7 +113,7 @@ export function markReady(session: Session, now: number): Session;
 export function heartbeat(session: Session, token: string, now: number): Session;
 ```
 
-- [ ] 下記の試験を追加。hash済みでない秘密情報がSessionへ入らないことも確認する。
+- [x] 下記の試験を追加。hash済みでない秘密情報がSessionへ入らないことも確認する。
 
 ```ts
 import test from 'node:test';
@@ -148,9 +148,9 @@ test('session B credential cannot authenticate session A', () => {
 });
 ```
 
-- [ ] `npm test`で失敗を確認。
-- [ ] `createSession`でidを`^[a-z0-9-]{1,64}$`、hashを64桁hex、時刻を非負safe integerとして検証する。初期状態はprovisioning、idle期限はnow+IDLE_MS、最大期限はnow+MAX_MS。加算後もsafe integerを検証する。
-- [ ] 認証・状態処理を以下の順で実装する。
+- [x] `npm test`で失敗を確認。
+- [x] `createSession`でidを`^[a-z0-9-]{1,64}$`、hashを64桁hex、時刻を非負safe integerとして検証する。初期状態はprovisioning、idle期限はnow+IDLE_MS、最大期限はnow+MAX_MS。加算後もsafe integerを検証する。
+- [x] 認証・状態処理を以下の順で実装する。
 
 ```ts
 // authorize: caller input, token, active state, deadline の順で検証
@@ -163,8 +163,8 @@ return { ...session, lastHeartbeatAt: now,
   idleExpiresAt: Math.min(now + IDLE_MS, session.maxExpiresAt) };
 ```
 
-- [ ] 不正id・hash・overflow、期限後markReady、readyから再度markReadyが失敗する試験を追加する。`assert.throws(() => createSession({id:'../a', tokenHash:hashToken(issueToken()), now:0}), rejects('INVALID_INPUT'))`を含める。
-- [ ] `npm test`と`npm run check`を実行しcommitする（`feat: enforce session ownership and lease lifecycle`）。
+- [x] 不正id・hash・overflow、期限後markReady、readyから再度markReadyが失敗する試験を追加する。`assert.throws(() => createSession({id:'../a', tokenHash:hashToken(issueToken()), now:0}), rejects('INVALID_INPUT'))`を含める。
+- [x] `npm test`と`npm run check`を実行しcommitする（`feat: enforce session ownership and lease lifecycle`）。
 
 ### Task 3: 終了と期限切れ回収の判定
 
@@ -179,7 +179,7 @@ export function expiryReason(session: Session, now: number): 'idle' | 'maximum' 
 export function cleanupCandidates(sessions: readonly Session[], now: number): string[];
 ```
 
-- [ ] 次のテストを追加する。
+- [x] 次のテストを追加する。
 
 ```ts
 import test from 'node:test';
@@ -211,9 +211,9 @@ test('reaper picks expired sessions without modifying active neighbors', () => {
 });
 ```
 
-- [ ] `npm test`で失敗を確認。
-- [ ] `beginClose`はactive状態からclosingへ、cleanup_failedからclosingへ遷移する。既存のcloseReasonを維持する。closing/deletedは同じ状態を返す。`finishClose`はclosingのみ受け付け、成功時deleted、失敗時cleanup_failed。deletedへの成功再通知は同じ状態を返し、それ以外はINVALID_STATE。
-- [ ] `expiryReason`は時刻を検証し、active状態だけを対象に最大期限→idle期限の順に判定する。`cleanupCandidates`はclosing/cleanup_failed/期限切れのIDを返し、deletedは除外する。入力は変更しない。
+- [x] `npm test`で失敗を確認。
+- [x] `beginClose`はactive状態からclosingへ、cleanup_failedからclosingへ遷移する。既存のcloseReasonを維持する。closing/deletedは同じ状態を返す。`finishClose`はclosingのみ受け付け、成功時deleted、失敗時cleanup_failed。deletedへの成功再通知は同じ状態を返し、それ以外はINVALID_STATE。
+- [x] `expiryReason`は時刻を検証し、active状態だけを対象に最大期限→idle期限の順に判定する。`cleanupCandidates`はclosing/cleanup_failed/期限切れのIDを返し、deletedは除外する。入力は変更しない。
 
 ```ts
 return sessions.filter(s =>
@@ -221,16 +221,18 @@ return sessions.filter(s =>
 ).map(s => s.id);
 ```
 
-- [ ] 最大期限とidle期限が一致した場合のmaximum優先、期限1ms前、deletedの除外、不正時刻、readyからのfinishClose拒否を追加試験する。
-- [ ] `npm test`と`npm run check`を実行しcommitする（`feat: define idempotent session cleanup transitions`）。
+- [x] 最大期限とidle期限が一致した場合のmaximum優先、期限1ms前、deletedの除外、不正時刻、readyからのfinishClose拒否を追加試験する。
+- [x] `npm test`と`npm run check`を実行しcommitする（`feat: define idempotent session cleanup transitions`）。
 
 ## 完了と次段階への引き継ぎ
 
-- [ ] 上記の全試験と型検査の結果を報告する。
-- [ ] HTTP認証、DBの排他・永続化、実リソースの削除、Dockerの分離は未実施と明記する。
-- [ ] 第2段階でこのSessionを永続化し、heartbeat/回収の競合をトランザクションで解決する計画を作る。
-- [ ] 第2段階では作成開始前の所有権記録、Composeへのセッションラベル、途中作成の回収、認証失効を実装する。純粋な判定だけを公開サーバーへ接続しない。
+- [x] 上記の全試験と型検査の結果を報告する。
+- [x] HTTP認証、DBの排他・永続化、実リソースの削除、Dockerの分離は未実施と明記する。
+- [x] 第2段階でこのSessionを永続化し、heartbeat/回収の競合をトランザクションで解決する計画を作る。
+- [x] 第2段階では作成開始前の所有権記録、Composeへのセッションラベル、途中作成の回収、認証失効を実装する。純粋な判定だけを公開サーバーへ接続しない。
 
 ## 計画自己レビュー
 
 第1段階の要件をTask 1〜3へ割り当て済み。全体の残りはdelivery計画の第2〜6段階で明示している。APIは本書内で定義したものだけを使用する。秘密のhash化、別セッションの拒否、期限境界、不正時刻、失敗後の再試行を試験に含めた。
+
+検証結果: `docs/evidence/2026-09-27-session-core.md`。次工程の詳細計画: `2026-09-27-visulia-durable-session-store.md`。
