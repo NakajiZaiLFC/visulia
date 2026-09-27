@@ -10,7 +10,7 @@ The session runtime is built for Linux/amd64. Build and execute it on the remote
 
 The agent port is opened after ES security setup and all three health checks succeed. Startup is bounded by210seconds; an independent30-minute runtime deadline stops the process if control-plane cleanup is unavailable. Unexpected child exits also close the agent and stop sibling process groups.
 
-Current internal routes: authenticated health, session-user credentials, `/elasticsearch/*`, and the session's Kibana base path. Service forwarding uses only the session user. Input is limited to10MiB per request; responses stream. The public `/v1/sessions/:id/api/*` route authenticates the owner and requires readiness before forwarding; redirects retain that API prefix. Browser handoff, editable run/upload APIs and the CLI still require integration.
+Current internal routes: authenticated health, session-user credentials, `/elasticsearch/*`, and the session's Kibana base path. Service forwarding uses only the session user. Input is limited to10MiB per request; responses stream. The public `/v1/sessions/:id/api/*` route authenticates the owner and requires readiness before forwarding; redirects retain that API prefix. Browser handoff, editable run/upload APIs and the CLI are implemented candidates; live integration remains unverified.
 
 ## Manual remote-runner sequence
 
@@ -24,12 +24,12 @@ docker build -t visulia-stack:build -f containers/stack/Dockerfile .
 node scripts/test-stack.mjs
 ```
 
-`.github/workflows/runtime-build.yml` performs these checks on a GitHub runner triggered manually or when the workflow definition changes, plus actual patched-Vector parser/delivery tests and ten delivery repetitions. It does not deploy Cloudflare, publish npm, or publish an image registry package.
+`.github/workflows/runtime-build.yml` performs these checks on a GitHub runner triggered manually or when the workflow definition changes, plus actual patched-Vector parser/delivery tests and ten delivery repetitions. After a successful smoke test it retains a compressed Docker archive and checksum as a private GitHub Actions artifact for one day. It does not deploy Cloudflare, publish npm, or publish an image registry package.
 
-The smoke container has networking disabled and6GiB memory. Requests are made by `docker exec` within the VM. The test generates four actual TomEE requests, reads their access log with Vector, checks four documents and HTTP-status ES|QL results in real Elasticsearch, then creates/reads a Kibana Data View. It removes the named container even when `docker run` rejects, and verifies absence through the daemon. It does not yet create a rendered Dashboard or prove Cloudflare isolation/deletion.
+The smoke container has networking disabled and6GiB memory. Requests are made by `docker exec` within the VM. The test generates four actual TomEE requests through the run API, validates and ingests them, adds four more during continuous ingestion, verifies eight documents and HTTP-status ES|QL results, reparses, creates/reads a Dashboard, exports/edits/applies a new Dashboard copy, and creates/reads a Kibana Data View. It removes the named container even when `docker run` rejects, and verifies absence through the daemon. It does not yet verify a browser-rendered Dashboard or prove Cloudflare isolation/deletion.
 
 ## Evidence boundary
 
-Local tests exercise HTTP transport, auth, process supervision, filesystem permissions, request limits and a simulated Container SDK. The Dockerfiles and smoke harness are candidates until the remote job succeeds. Image startup and patched-Vector delivery must not be inferred from local green tests. Runtime logs are currently suppressed; failed-start diagnostics need further operator-facing work.
+Local tests exercise HTTP transport, auth, process supervision, filesystem permissions, request limits and a simulated Container SDK. Remote run 36297592703 successfully compiled patched Vector, passed actual Linux delivery checks and built the combined image, but the smoke container exited before readiness. Service startup is not proven. Run 36298637793 adds fixed phase/operation/errno diagnostics; arbitrary service output and credentials are not forwarded. Local diagnostic-filter and cleanup tests pass. Deployment remains pending successful live verification.
 
 Upstream TomEE image layout was checked against the official-images source revision3695dcec008bf611b2dbd06eb2123a7b159efc27: `/usr/local/tomee`, Temurin21 JRE on Ubuntu Noble. Vendor licenses remain in the copied distributions; Vector's license and modified-source patch are also copied.
