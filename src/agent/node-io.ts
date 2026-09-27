@@ -25,11 +25,12 @@ export class NodeBootstrapIO implements BootstrapIO {
  }
  async request(path:string,body:unknown,authorization:string):Promise<void>{
   if(!/^\/_security\/(?:user\/kibana_system\/_password|role\/visulia_data|user\/visulia_[a-f0-9]{32})$/.test(path))throw new Error('INVALID_SECURITY_PATH');
+  console.error('RUNTIME_BOOTSTRAP:security-'+(path.includes('_password')?'password':path.includes('/role/')?'role':'user'));
   try{
    const response=await this.fetcher('http://127.0.0.1:9200'+path,{method:'POST',redirect:'error',headers:{authorization,'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.any([this.services.signal,AbortSignal.timeout(10000)])});
    await response.body?.cancel();
-   if(!response.ok)throw new Error('SECURITY_SETUP_FAILED');
-  }catch{console.error('RUNTIME_BOOTSTRAP:security-failed');throw new Error('SECURITY_SETUP_FAILED');}
+   if(!response.ok){console.error('RUNTIME_BOOTSTRAP:security-http-'+response.status);throw new Error('SECURITY_SETUP_FAILED');}
+  }catch(error){console.error('RUNTIME_BOOTSTRAP:security-'+((error as Error)?.name==='TimeoutError'?'timeout':'failed'));throw new Error('SECURITY_SETUP_FAILED');}
  }
  async stop():Promise<void>{await this.services.stop();}
 }
