@@ -48,6 +48,12 @@ test('runtime provisions separate Kibana and demo credentials before starting de
  assert.deepEqual(events,['keystore','start:elasticsearch','ready:9200','/_security/user/kibana_system/_password','/_security/role/visulia_data','/_security/user/'+config.secrets.username,'start:kibana','start:tomee','ready:5601','ready:8080']);
  assert.equal(files.get('/work/config/elasticsearch/elasticsearch.yml'),config.elasticsearch);
  assert.equal(files.get('/work/config/kibana/kibana.yml'),config.kibana);
+ const jvm=files.get('/work/config/elasticsearch/jvm.options.d/visulia.options');
+ assert(jvm);
+ assert(jvm.startsWith('-Xlog:disable\n'));
+ assert(jvm.includes('file=/work/elasticsearch-logs/gc.log'));
+ assert(jvm.includes('-XX:ErrorFile=/work/elasticsearch-logs/hs_err_pid%p.log'));
+ assert(jvm.includes('-XX:HeapDumpPath=/work/elasticsearch-logs'));
 });
 test('failed security setup stops runtime and never launches the public dashboard',async()=>{
  const {io,events}=harness('/_security/role/visulia_data');

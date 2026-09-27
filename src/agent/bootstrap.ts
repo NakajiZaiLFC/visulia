@@ -14,6 +14,9 @@ export async function bootstrap(config:RuntimeConfig,io:BootstrapIO):Promise<voi
  try{
   await io.write('/work/config/elasticsearch/elasticsearch.yml',config.elasticsearch);
   await io.write('/work/config/kibana/kibana.yml',config.kibana);
+  // The launcher changes cwd to read-only ES_HOME; JVM outputs belong to the session.
+  await io.write('/work/config/elasticsearch/jvm.options.d/visulia.options',
+   '-Xlog:disable\n-Xlog:gc*,gc+age=trace,safepoint:file=/work/elasticsearch-logs/gc.log:utctime,level,pid,tags:filecount=4,filesize=16m\n-XX:ErrorFile=/work/elasticsearch-logs/hs_err_pid%p.log\n-XX:HeapDumpPath=/work/elasticsearch-logs\n');
   await io.run('/opt/elasticsearch/bin/elasticsearch-keystore',['add','-x','-f','bootstrap.password'],esEnv,config.secrets.elastic+'\n');
   io.start('elasticsearch','/opt/elasticsearch/bin/elasticsearch',[],esEnv);
   await io.wait('http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=1s',authorization);
