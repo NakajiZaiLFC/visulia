@@ -13,8 +13,8 @@ async function api(path,method='GET',body){
 assert.equal((await fetch(base+'/health')).status,401);
 const credentials=await api('/credentials');
 const mapping=JSON.parse(await readFile('/opt/visulia/templates/mappings/access.json','utf8'));
-const run=await api('/runs','POST',{metadata:{format:'pipe-v1',duration_unit:'us',service_name:'tomee',service_version:'10.2.0',environment:'ci',host_name:'demo'},parser:await readFile('/opt/visulia/templates/parsers/access.vrl','utf8'),mapping});
-const runPath='/runs/'+run.id,index='visulia-'+run.id;
+let run=await api('/runs','POST',{metadata:{format:'pipe-v1',duration_unit:'us',service_name:'tomee',service_version:'10.2.0',environment:'ci',host_name:'demo'},parser:await readFile('/opt/visulia/templates/parsers/access.vrl','utf8'),mapping});
+let runPath='/runs/'+run.id,index='visulia-'+run.id;
 async function generate(count){
  await api(runPath+'/demo','POST',{scenario:'mixed',count,rate:5});
  let state;
@@ -51,7 +51,12 @@ try{
  const lines=(await readFile('/work/raw/access.log','utf8')).trim().split('\n');
  assert.equal(lines.length,8,'health requests must not appear in access logs');
  await api(runPath+'/stop','POST');
- await api(runPath+'/reparse','POST');await delivered(8);
+ const originalIndex=index,originalRun=run.id;
+ run=await api(runPath+'/reparse','POST');
+ assert.notEqual(run.id,originalRun);assert.equal(run.sourceRunId,originalRun);
+ runPath='/runs/'+run.id;index='visulia-'+run.id;
+ await delivered(8);
+ assert.equal((await api('/elasticsearch/'+originalIndex+'/_count')).count,8,'reparse retains the previous analysis');
  const dashboard=await createDashboard(run.id,api);
  assert.equal(typeof dashboard.id,'string');
  const template=await pullDashboardTemplate(run.id,dashboard.id,api);
@@ -64,5 +69,5 @@ try{
  assert.equal(typeof created.data_view?.id,'string');
  const loaded=await api(credentials.kibanaPath+'/api/data_views/data_view/'+encodeURIComponent(created.data_view.id));
  assert.equal(loaded.data_view.title,index);
- console.log(JSON.stringify({actualTomEERequests:8,parsedDocuments:8,continuousIngest:true,reparse:true,esqlStatusCounts:[[200,4],[404,2],[500,2]],kibanaDataView:true,dashboardSaved:dashboard.id,editedTemplateSaved:copied.id}));
+ console.log(JSON.stringify({actualTomEERequests:8,parsedDocuments:8,continuousIngest:true,reparse:true,previousAnalysisRetained:true,esqlStatusCounts:[[200,4],[404,2],[500,2]],kibanaDataView:true,dashboardSaved:dashboard.id,editedTemplateSaved:copied.id}));
 }finally{await api(runPath+'/stop','POST');}

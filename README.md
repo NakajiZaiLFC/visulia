@@ -27,8 +27,10 @@ Cloudflare向けの制御処理はworkerdで検証しています。Container本
 Node.js 24以上で、ビルド後に `node dist/src/cli/main.js --server https://接続先` を実行します。
 `npm pack`したパッケージをインストールすると、実行名は `visulia` です。npmには未公開です。
 
-メニューは `init / demo / upload / template / config / check / ingest / status / stop / reparse / query / dashboard / dashboard-pull / dashboard-apply / kibana / quit`。
+メニューは `runs / use / init / demo / upload / template / config / check / ingest / status / stop / reparse / query / dashboard / dashboard-pull / dashboard-apply / kibana / quit`。
 まずdemo生成完了をstatusで確認し、check、ingestの順に進みます。投入中にもdemoを追加生成できます。
+
+`reparse`は元の解析を停止し、ログと現在の設定を新しい解析先へコピーして再検証・投入します。元の結果やチェックポイントは削除しません。CLIは新しい解析先へ切り替わります。`runs`で解析IDを一覧表示し、`use`で前の結果へ戻れます。1セッション内の解析先は再解析分を含め3件までです。作成済みのDashboardは元の解析先を参照し続け、新しい解析先のDashboardは改めて作成します。
 initではログ形式・時間単位・サービス名・環境名を対話で設定します。templateで現在の設定を新規ファイルへ取得し、編集したmetadata・parser・mappingのJSONをconfigで読み込みます。uploadは選んだファイルの送信確認後に実行します。
 接続用トークンはメモリだけで保持し、終了時に専用環境の削除を要求します。
 `kibana`で60秒・1回限りのブラウザ接続リンクを発行できます。`dashboard`はES|QLを検証して新しいDashboardを作成する候補実装です。dashboard-pullで編集済みの定義を取得し、dashboard-applyで現在のログを参照する新しいDashboardを作成できます（インラインES|QL・テキストパネルに対応）。元のDashboardは変更しません。実機の保存・描画確認と自己ホスト導入ガイドはまだ完了していません。

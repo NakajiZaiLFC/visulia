@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {RunManager,type RunIO,type RunConfig} from '../../src/agent/runs.js';
@@ -34,14 +34,21 @@ test('ingest requires successful check of current config and current upload',asy
  const stopped=await f.manager.stop(run.id);assert.equal(stopped.state,'stopped');
  assert.equal(JSON.stringify(stopped).includes('test-secret'),false);
 });
-test('reparse stops old ingest, rechecks before deleting data, and starts from a fresh checkpoint',async t=>{
+test('reparse retains old results and checkpoints while validating a copied run',async t=>{
  const f=await fixture(t);const run=await f.manager.create(config);
  await f.manager.upload(run.id,bytes);await f.manager.check(run.id);await f.manager.ingest(run.id);
+ await writeFile(join(f.root,run.id,'vector','checkpoint-proof'),'old');
  f.setValid(false);await assert.rejects(f.manager.reparse(run.id),/CHECK_REQUIRED/);
  assert.equal(f.events.some(e=>e.startsWith('delete:')),false);
  f.setValid(true);const replay=await f.manager.reparse(run.id);
  assert.equal(replay.state,'ingesting');
- assert(f.events.indexOf('stop')<f.events.indexOf('delete:visulia-'+run.id));
+ assert.notEqual(replay.id,run.id);
+ assert.equal(f.events.some(e=>e.startsWith('delete:')),false);
+ assert(f.events.includes('create:visulia-'+replay.id));
+ assert.equal(await readFile(join(f.root,run.id,'vector','checkpoint-proof'),'utf8'),'old');
+ assert.equal(await readFile(join(f.root,replay.id,'input','upload.log'),'utf8'),'valid-line\n');
+ assert.deepEqual(new Uint8Array(await readFile(join(f.root,replay.id,'source-upload.bin'))),bytes);
+ assert.equal(f.manager.get(run.id).state,'checked');
  assert.equal(f.events.at(-1),'start');
  await f.manager.stop(run.id);
 });
@@ -72,7 +79,7 @@ test('a queued upload invalidates an in-flight successful check before ingest ca
  await assert.rejects(f.manager.ingest(run.id),/CHECK_REQUIRED/);
  assert.equal(f.events.some(e=>e.startsWith('create:')),false);
 });
-test('uncertain index creation is fenced until explicit reparse cleans up the intended index',async t=>{
+test('uncertain index creation stays fenced while reparse allocates another index',async t=>{
  const f=await fixture(t);const run=await f.manager.create(config);
  await f.manager.upload(run.id,bytes);await f.manager.check(run.id);
  const create=f.io.createIndex;
@@ -80,8 +87,11 @@ test('uncertain index creation is fenced until explicit reparse cleans up the in
  await assert.rejects(f.manager.ingest(run.id),/NETWORK_FAILED/);
  f.io.createIndex=create;
  await assert.rejects(f.manager.ingest(run.id),/REPARSE_REQUIRED/);
- await f.manager.reparse(run.id);
- assert.equal(f.events.includes('delete:visulia-'+run.id),true);
+ const replay=await f.manager.reparse(run.id);
+ assert.notEqual(replay.id,run.id);
+ assert.equal(f.events.some(e=>e.startsWith('delete:')),false);
+ assert(f.events.includes('create:visulia-'+replay.id));
+ await assert.rejects(f.manager.ingest(run.id),/REPARSE_REQUIRED/);
  await f.manager.stop(run.id);
 });
 
@@ -139,4 +149,21 @@ test('reparse fences a queued demo append without waiting on its own mutation qu
  assert.equal((await reparse).state,'ingesting');await late;
  assert.equal(await readFile(join(f.root,run.id,'input','upload.log'),'utf8'),'valid-line\n');
  await manager.stop(run.id);
+});
+test('reparse capacity failure does not stop the original live ingest',async t=>{
+ const f=await fixture(t),run=await f.manager.create(config);
+ await f.manager.upload(run.id,bytes);await f.manager.check(run.id);await f.manager.ingest(run.id);
+ await f.manager.create(config);await f.manager.create(config);
+ await assert.rejects(f.manager.reparse(run.id),/RUN_CAPACITY/);
+ assert.equal(f.manager.get(run.id).state,'ingesting');assert.equal(f.events.includes('stop'),false);
+});
+test('a cloned run is checked with its new identity before creating an index',async t=>{
+ const f=await fixture(t),run=await f.manager.create(config);
+ await f.manager.upload(run.id,bytes);await f.manager.check(run.id);await f.manager.ingest(run.id);
+ f.io.check=async input=>({valid:input.runId===run.id,accepted:input.runId===run.id?1:0,rejected:input.runId===run.id?0:1,total:1});
+ await assert.rejects(f.manager.reparse(run.id),/CHECK_REQUIRED/);
+ assert.equal(f.events.filter(e=>e.startsWith('create:')).length,1);
+ assert.equal(f.events.some(e=>e.startsWith('delete:')),false);
+ assert.equal(f.manager.list().length,2);
+ assert.equal(await readFile(join(f.root,run.id,'input','upload.log'),'utf8'),'valid-line\n');
 });

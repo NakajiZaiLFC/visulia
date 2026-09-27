@@ -39,3 +39,25 @@ test('input disconnect during provisioning cancels polling and requests deletion
  child.stdout!.resume();child.stderr!.resume();
  const [code]=await once(child,'exit');assert.equal(code,0);assert(deleted);
 });
+test('CLI switches query target after reparse and can select the retained original',async t=>{
+ const old='aabbccdd-1111-2222-3333-001122334455',next='aabbccdd-1111-2222-3333-001122334456';const queries:string[]=[];
+ const server=createServer(async(req,res)=>{
+  let body='';for await(const chunk of req)body+=chunk;
+  res.setHeader('content-type','application/json');
+  if(req.method==='POST'&&req.url==='/v1/sessions')res.end(JSON.stringify({id:old,token:'a'.repeat(43)}));
+  else if(req.url?.endsWith('/api/runs')&&req.method==='POST')res.end(JSON.stringify({id:old}));
+  else if(req.url?.endsWith('/reparse'))res.end(JSON.stringify({id:next,sourceRunId:old,state:'ingesting'}));
+  else if(req.url?.endsWith('/api/runs')&&req.method==='GET')res.end(JSON.stringify({runs:[{id:old},{id:next}]}));
+  else if(req.url?.endsWith('/api/runs/'+old))res.end(JSON.stringify({id:old,state:'stopped'}));
+  else if(req.url?.endsWith('/_query')){queries.push(JSON.parse(body).query);res.end('{}');}
+  else res.end(JSON.stringify({state:req.method==='DELETE'?'deleted':'ready'}));
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});
+ const address=server.address();assert(address&&typeof address!=='string');
+ const child=spawn(process.execPath,[process.env.VISULIA_CLI_ENTRY??'dist/src/cli/main.js','--server',`http://127.0.0.1:${address.port}`],{stdio:['pipe','pipe','pipe']});
+ let output='';child.stdout.on('data',x=>{output+=x;});child.stderr.on('data',x=>{output+=x;});
+ child.stdin.end(`reparse\nquery\n\nruns\nuse\n${old}\nquery\n\nquit\n`);
+ const [code]=await once(child,'exit');assert.equal(code,0,output);
+ assert.equal(queries.length,2,output);assert.match(queries[0]!,new RegExp('FROM visulia-'+next));assert.match(queries[1]!,new RegExp('FROM visulia-'+old));
+});

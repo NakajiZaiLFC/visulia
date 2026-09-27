@@ -49,14 +49,21 @@ if(args.includes('--help')||args.includes('-h')){
    await delay(1000,undefined,{signal:abort.signal});
   }
   const config={metadata:{format:'pipe-v1',duration_unit:'us',service_name:'tomee',service_version:'10.2.0',environment:'demo',host_name:'demo'},parser:await readFile(new URL('../../../templates/parsers/access.vrl',import.meta.url),'utf8'),mapping:JSON.parse(await readFile(new URL('../../../templates/mappings/access.json',import.meta.url),'utf8'))};
-  const run=await client.api('/runs','POST',config),path='/runs/'+run.id;
+  let run=await client.api('/runs','POST',config),path='/runs/'+run.id;
   let latestDashboard:string|undefined;
   console.log('準備できました。まず demo でサンプルを生成し、check → ingest の順に進めます。');
   while(!abort.signal.aborted){
-   const command=await ask('\ninit / demo / upload / template / config / check / ingest / status / stop / reparse / query / dashboard / dashboard-pull / dashboard-apply / kibana / quit','status');
+   const command=await ask('\nruns / use / init / demo / upload / template / config / check / ingest / status / stop / reparse / query / dashboard / dashboard-pull / dashboard-apply / kibana / quit','status');
    if(command==='quit')break;
    try{
-    if(command==='init'){
+    if(command==='runs'){
+     const result=await client.api('/runs');
+     console.log(JSON.stringify(result.runs.map((item:any)=>({id:item.id,state:item.state,sourceRunId:item.sourceRunId,selected:item.id===run.id})),null,2));
+    }else if(command==='use'){
+     const id=await ask('切り替える解析ID（runsで一覧表示）');
+     if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(id))throw new Error('RUN_NOT_FOUND');
+     run=await client.api('/runs/'+id);path='/runs/'+id;latestDashboard=undefined;showRun(run);
+    }else if(command==='init'){
      const current=await client.api(path),metadata={...current.config.metadata};
      const format=await ask('ログ形式: pipe-v1 / common-v1',metadata.format);
      if(!['pipe-v1','common-v1'].includes(format))throw new Error('INVALID_FORMAT');
@@ -86,9 +93,14 @@ if(args.includes('--help')||args.includes('-h')){
      const info=await stat(file);if(!info.isFile()||info.size>1024*1024)throw new Error('INVALID_CONFIG_FILE');
      showRun(await client.api(path+'/config','PUT',JSON.parse(await readFile(file,'utf8'))));
     }else if(['check','ingest','stop','reparse'].includes(command)){
-     showRun(await client.api(path+'/'+command,'POST'));
+     const result=await client.api(path+'/'+command,'POST');
+     if(command==='reparse'){
+      run=result;path='/runs/'+run.id;latestDashboard=undefined;
+      console.log('元の結果を保持し、新しい解析先に切り替えました: '+run.id+'\nrunsで一覧を表示し、useで過去の解析先へ切り替えられます。');
+     }
+     showRun(result);
     }else if(command==='status'){
-     const result=await client.api(path);console.log(JSON.stringify({state:result.state,bytes:result.bytes,check:result.check,demo:result.demo},null,2));
+     showRun(await client.api(path));
     }else if(command==='dashboard'){
      console.log('クエリを検証し、新しいDashboardを作成しています…');
      const result=await createDashboard(run.id,client.api.bind(client));latestDashboard=result.id;
@@ -126,6 +138,7 @@ function safeError(error:unknown){
  const message=error instanceof Error?error.message:'';
  const hints:Record<string,string>={
   OFFLINE_USAGE:'使い方: visulia check --offline --config 設定.json --logs アクセス.log [--vector Vector実行ファイル]',
+  RUN_CAPACITY:'1セッションの解析先上限は3件です。既存の解析先はruns/useで参照できます。追加の解析は新しいセッションで実行してください。',
   RUN_ACTIVE:'生成または投入が実行中です。stopしてから変更してください。',
   CHECK_REQUIRED:'現在の設定とログをcheckで検証してから実行してください。',
   REPARSE_REQUIRED:'既存データと設定が異なります。reparseで再解析してください。',
@@ -144,4 +157,4 @@ function safeError(error:unknown){
  return Object.hasOwn(hints,message)?hints[message]!: /^[A-Z][A-Z0-9_]{0,79}$/.test(message)?message:'OPERATION_FAILED';
 }
 
-function showRun(result:any){console.log(JSON.stringify({state:result.state,bytes:result.bytes,check:result.check,demo:result.demo},null,2));}
+function showRun(result:any){console.log(JSON.stringify({id:result.id,sourceRunId:result.sourceRunId,state:result.state,revision:result.revision,indexedRevision:result.indexedRevision,bytes:result.bytes,check:result.check,demo:result.demo},null,2));}

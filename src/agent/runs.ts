@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {mkdir,writeFile,readFile,rename,rm,appendFile} from 'node:fs/promises';
+import {mkdir,writeFile,readFile,rename,copyFile,appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import type {CheckInput,CheckResult} from '../pipeline/check.js';
 import {decodeLogs} from '../pipeline/input.js';
@@ -8,7 +8,7 @@ export interface RunConfig {metadata:Record<string,string>;parser:string;mapping
 export interface RunIO {check(input:CheckInput):Promise<CheckResult>;probe():Promise<void>;createIndex(name:string,mapping:unknown):Promise<void>;deleteIndex(name:string):Promise<void>;start(path:string,onExit:()=>void):Promise<()=>Promise<void>>;}
 export interface DemoRequest {scenario:'normal'|'errors'|'slow'|'mixed';count:number;rate:number;}
 export interface RunOptions {root:string;elasticsearch:{url:string;username:string;password:string};signal:AbortSignal;io:RunIO;demo?:(options:DemoRequest&{runId:string},line:(value:string)=>Promise<void>,signal:AbortSignal)=>Promise<void>;}
-interface Run {id:string;state:'draft'|'checking'|'checked'|'ingesting'|'stopped'|'failed';revision:number;bytes:number;config:RunConfig;check?:CheckResult;checkedRevision?:number;indexRevision?:number;indexPending?:boolean;stop?:()=>Promise<void>;demo?:{state:'running'|'complete'|'stopped'|'failed';received:number;error?:string};demoAbort?:AbortController;}
+interface Run {id:string;sourceRunId?:string;state:'draft'|'checking'|'checked'|'ingesting'|'stopped'|'failed';revision:number;bytes:number;config:RunConfig;check?:CheckResult;checkedRevision?:number;indexRevision?:number;indexPending?:boolean;stop?:()=>Promise<void>;demo?:{state:'running'|'complete'|'stopped'|'failed';received:number;error?:string};demoAbort?:AbortController;}
 export class RunManager {
  private readonly runs=new Map<string,Run>();
  private queue:Promise<unknown>=Promise.resolve();
@@ -22,7 +22,7 @@ export class RunManager {
  private live(){if(this.options.signal.aborted)throw new Error('SESSION_STOPPED');}
  private find(id:string){const run=this.runs.get(id);if(!run)throw new Error('RUN_NOT_FOUND');return run;}
  private directory(run:Run){return join(this.options.root,run.id);}
- private snapshot(run:Run){return structuredClone({id:run.id,state:run.state,revision:run.revision,bytes:run.bytes,config:run.config,...(run.check?{check:run.check}:{}),...(run.demo?{demo:run.demo}:{})});}
+ private snapshot(run:Run){return structuredClone({id:run.id,state:run.state,revision:run.revision,bytes:run.bytes,config:run.config,...(run.sourceRunId?{sourceRunId:run.sourceRunId}:{}),...(run.indexRevision!==undefined?{indexedRevision:run.indexRevision}:{}),...(run.check?{check:run.check}:{}),...(run.demo?{demo:run.demo}:{})});}
  private validate(config:RunConfig,id:string){
   try{createPipeline({...config,runId:id,directory:join(this.options.root,id),elasticsearch:this.options.elasticsearch});return structuredClone(config);}
   catch{throw new Error('INVALID_CONFIG');}
@@ -59,13 +59,14 @@ export class RunManager {
   });
   return this.snapshot(run);
  });}
- async create(config:RunConfig){return this.serial(async()=>{
+ private async allocate(config:RunConfig):Promise<Run>{
   if(this.runs.size>=3)throw new Error('RUN_CAPACITY');
   const id=randomUUID(),run:Run={id,state:'draft',revision:1,bytes:0,config:this.validate(config,id)};
   const root=this.directory(run);
   for(const path of ['input','vector','quarantine'])await mkdir(join(root,path),{recursive:true,mode:0o700});
-  await this.save(run);this.runs.set(id,run);return this.snapshot(run);
- });}
+  await this.save(run);this.runs.set(id,run);return run;
+ }
+ async create(config:RunConfig){return this.serial(async()=>this.snapshot(await this.allocate(config)));}
  async update(id:string,config:RunConfig){return this.serial(async()=>{
   const run=this.find(id);this.editable(run);run.config=this.validate(config,id);this.invalidate(run);await this.save(run);return this.snapshot(run);
  });}
@@ -122,11 +123,19 @@ export class RunManager {
  }
  async stop(id:string){return this.serial(async()=>{const run=this.find(id);await this.halt(run);return this.snapshot(run);});}
  async reparse(id:string){return this.serial(async()=>{
-  const run=this.find(id);await this.halt(run);await this.verify(run);
+  const run=this.find(id);
+  if(this.runs.size>=3)throw new Error('RUN_CAPACITY');
+  await this.halt(run);await this.verify(run);
   if(!run.check?.valid)throw new Error('CHECK_REQUIRED');
   this.live();
-  if(run.indexRevision!==undefined||run.indexPending){await this.options.io.deleteIndex('visulia-'+run.id);delete run.indexRevision;delete run.indexPending;}
-  for(const name of ['vector','quarantine']){const path=join(this.directory(run),name);await rm(path,{recursive:true,force:true});await mkdir(path,{mode:0o700});}
-  return this.begin(run);
+  const replay=await this.allocate(run.config);replay.sourceRunId=run.id;
+  const source=this.directory(run),destination=this.directory(replay);
+  await copyFile(join(source,'input','upload.log'),join(destination,'input','upload.log'));
+  try{await copyFile(join(source,'source-upload.bin'),join(destination,'source-upload.bin'));}
+  catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+  replay.bytes=run.bytes;
+  // The new ID is part of the parser input, so validate the clone too.
+  await this.verify(replay);
+  return this.begin(replay);
  });}
 }
