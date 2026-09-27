@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { SessionError, type Session } from '../session/types.js';
-import { authorize, beginClose, heartbeat } from '../session/lifecycle.js';
+import { authorize, beginClose, heartbeat, finishClose } from '../session/lifecycle.js';
 import { expiryReason } from '../session/reaper.js';
 import { openDatabase, transaction } from './database.js';
 import { decodeSession } from './session-record.js';
@@ -61,5 +61,15 @@ export class SessionStore {
     });
   }
 
+  /** Internal: call after actual resource removal, never directly from client input. */
+  reportCleanup(id: string, success: boolean): Session {
+    return transaction(this.db, () => {
+      const session = this.require(id);
+      if (success && this.db.prepare("SELECT 1 FROM resources WHERE session_id=? AND state!='removed' LIMIT 1").get(id)) {
+        throw new SessionError('INVALID_STATE');
+      }
+      return this.save(finishClose(session, success));
+    });
+  }
   close(): void { this.db.close(); }
 }
