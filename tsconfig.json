@@ -8,7 +8,16 @@
     "noEmitOnError": true,
     "rootDir": ".",
     "outDir": "dist",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "src/cloudflare",
+    "tests/cloudflare"
+  ]
 }

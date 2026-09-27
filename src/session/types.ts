@@ -1,7 +1,7 @@
 export const IDLE_MS = 300_000;
 export const MAX_MS = 1_800_000;
 export type State = 'provisioning' | 'ready' | 'closing' | 'cleanup_failed' | 'deleted';
-export type Reason = 'requested' | 'idle' | 'maximum' | 'provision_failed';
+export type Reason = 'requested' | 'idle' | 'maximum' | 'provision_failed' | 'container_stopped';
 export interface Session {
   id: string;
   tokenHash: string;

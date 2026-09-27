@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "visulia-demo",
+  "main": "src/cloudflare/index.ts",
+  "compatibility_date": "2026-09-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": { "enabled": false },
+  "vars": { "MAX_SESSIONS": "3" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "REGISTRY", "class_name": "Registry" },
+      { "name": "SESSIONS", "class_name": "SessionController" },
+      { "name": "STACKS", "class_name": "Stack" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Registry", "SessionController", "Stack"] }],
+  "containers": [{
+    "class_name": "Stack",
+    "image": "./containers/stack/Dockerfile",
+    "instance_type": "standard-3",
+    "max_instances": 3
+  }]
+}

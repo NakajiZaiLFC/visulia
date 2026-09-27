@@ -13,7 +13,10 @@ VISULIAは、npmで導入する対話型CLIから一時的なログ解析環境�
 - SQLiteによるセッションと所有リソースの永続化。再オープン後も期限・失効を維持。
 - トランザクションによるheartbeatと終了状態の更新。未回収リソースがあれば削除完了を拒否。
 
-セッションの状態処理と実SQLiteへの保存を実装しています。コンテナやアップロードデータを実際に作成・削除する処理はまだありません。
+- Cloudflare WorkersのセッションAPIと、Durable Objectsによる認証・利用枠・期限管理。
+- Containerの起動・削除アダプター。起動中の終了、削除失敗の再試行、異常終了後の失効に対応。
+
+Cloudflare向けの制御処理はworkerdで検証しています。Container本体はテスト用の代替実装で検証した段階で、Elasticsearch・Kibanaの実行イメージ、CLI、実環境へのデプロイは未完了です。SQLiteは自己ホスト向けの構成要素であり、Workersでの保存先はDurable Objectsです。
 
 ## 開発用の検証
 
@@ -21,6 +24,8 @@ VISULIAは、npmで導入する対話型CLIから一時的なログ解析環境�
 npm ci
 npm test
 npm run check
+npm run test:worker
+npm run check:worker
 ```
 
 現時点の検証環境はNode.js 25.8.2 / npm 11.12.1です。公開版の対応Node.jsバージョンは配布検証で確定します。
@@ -36,3 +41,5 @@ npm run check
 解析中はログをサーバー側に一時保存します。「一切保存しない」仕組みではありません。公開デモへのアップロードは外部送信に当たります。外部送信できないログには、今後提供する社内自己ホスト構成を使用します。
 
 設計と計画は`docs/superpowers/`、実装の検証記録は`docs/evidence/`にあります。
+
+Cloudflareでの構成は`docs/architecture/cloudflare.md`に記載しています。`wrangler.containers.example.jsonc`は実行イメージを組み込むための未完成の構成案で、そのままデプロイするものではありません。`wrangler.types.jsonc`は型生成だけに使用します。

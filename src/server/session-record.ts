@@ -19,7 +19,7 @@ export function decodeSession(payload: unknown, rowId: string): Session {
       || s.idleExpiresAt !== s.lastHeartbeatAt + Math.min(IDLE_MS, s.maxExpiresAt - s.lastHeartbeatAt)) throw new Error();
     const active = s.state === 'provisioning' || s.state === 'ready';
     if (active ? s.closeReason !== undefined
-      : !['requested','idle','maximum','provision_failed'].includes(s.closeReason ?? '')) throw new Error();
+      : !['requested','idle','maximum','provision_failed','container_stopped'].includes(s.closeReason ?? '')) throw new Error();
     return s;
   } catch {
     throw new Error('CORRUPT_SESSION');

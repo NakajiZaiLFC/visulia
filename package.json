@@ -6,10 +6,19 @@
   "scripts": {
     "build": "tsc",
     "test": "npm run build && node --test dist/tests/unit/*.test.js",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test:worker": "node --test tests/cloudflare/*.test.mjs",
+    "check:worker": "tsc -p tsconfig.worker.json --noEmit",
+    "types:worker": "wrangler types --config wrangler.types.jsonc --env-interface CloudflareBindings worker-configuration.d.ts"
   },
   "devDependencies": {
     "@types/node": "26.6.3",
-    "typescript": "7.0.2"
+    "esbuild": "0.28.2",
+    "miniflare": "5.20260925.0-alpha",
+    "typescript": "7.0.2",
+    "wrangler": "4.141.0"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "0.3.7"
   }
 }
