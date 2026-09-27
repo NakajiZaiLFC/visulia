@@ -13,6 +13,8 @@ VISULIAは、npmで導入する対話型CLIから一時的なログ解析環境�
 - SQLiteによるセッションと所有リソースの永続化。再オープン後も期限・失効を維持。
 - トランザクションによるheartbeatと終了状態の更新。未回収リソースがあれば削除完了を拒否。
 
+- Vector/VRLによる2形式のアクセスログ解析、厳密なSchema検証、不正行の隔離。
+- 継続追記、読み取り再開、ディスクバッファ、renameローテーションの投入設定と実Vectorテスト。未修正版Vectorで断続的な停止を確認しており、修正版ビルドでの再検証が残っています。
 - Cloudflare WorkersのセッションAPIと、Durable Objectsによる認証・利用枠・期限管理。
 - Containerの起動・削除アダプター。起動中の終了、削除失敗の再試行、異常終了後の失効に対応。
 
@@ -43,3 +45,5 @@ npm run check:worker
 設計と計画は`docs/superpowers/`、実装の検証記録は`docs/evidence/`にあります。
 
 Cloudflareでの構成は`docs/architecture/cloudflare.md`に記載しています。`wrangler.containers.example.jsonc`は実行イメージを組み込むための未完成の構成案で、そのままデプロイするものではありません。`wrangler.types.jsonc`は型生成だけに使用します。
+
+ログ形式・時間単位・Mappingの編集範囲・配信保証は`docs/pipeline-contract.md`、実Vectorによる検証は`docs/evidence/2026-09-27-vector-pipeline.md`を参照してください。

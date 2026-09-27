@@ -1,0 +1,34 @@
+{
+  "sources": {"input":{"type":"stdin"}},
+  "transforms": {
+    "parse":{"type":"remap","inputs":["input"],"file":"templates/parsers/access.vrl","drop_on_error":true,"drop_on_abort":true,"reroute_dropped":true}
+  },
+  "sinks":{"discard":{"type":"blackhole","inputs":["parse","parse.dropped"]}},
+  "tests":[
+    {
+      "name":"pipe timestamps, microseconds and request id normalize to common fields",
+      "inputs":[{"insert_at":"parse","type":"log","log_fields":{
+        "message":"2026-09-27T12:00:00.123+09:00|GET|/demo/ok|200|1234|request-001",
+        "metadata":{"format":"pipe-v1","duration_unit":"us","service_name":"demo","service_version":"10.2.0","environment":"demo","host_name":"tomee","run_id":"run-001","file_path":"access.log"}
+      }}],
+      "outputs":[{"extract_from":"parse","conditions":[{"type":"vrl","source":"assert_eq!(.\"@timestamp\", t'2026-09-27T03:00:00.123Z')\nassert_eq!(.event.duration, 1234000)\nassert_eq!(.event.id, \"request-001\")\nassert_eq!(.http.response.status_code, 200)\nassert_eq!(.analysis.schema_version, \"1\")\nassert!(!exists(.metadata))"}]}]
+    },
+    {
+      "name":"common log pattern has no invented duration or user",
+      "inputs":[{"insert_at":"parse","type":"log","log_fields":{
+        "message":"127.0.0.1 - - [27/Sep/2026:03:00:00 +0000] \"GET /demo/ok?foo=bar HTTP/1.1\" 200 17",
+        "metadata":{"format":"common-v1","duration_unit":"none","service_name":"demo","service_version":"10.2.0","environment":"demo","host_name":"tomee","run_id":"run-001","file_path":"access.log"}
+      }}],
+      "outputs":[{"extract_from":"parse","conditions":[{"type":"vrl","source":"assert_eq!(.url.path, \"/demo/ok\")\nassert_eq!(.\"@timestamp\", t'2026-09-27T03:00:00Z')\nassert!(!exists(.event.duration))\nassert!(!exists(.user))"}]}]
+    },
+    {
+      "name":"missing timezone is quarantined",
+      "inputs":[{"insert_at":"parse","type":"log","log_fields":{
+        "message":"2026-09-27T12:00:00.123|GET|/demo/ok|200|1234|request-001",
+        "metadata":{"format":"pipe-v1","duration_unit":"us","service_name":"demo","service_version":"10.2.0","environment":"demo","host_name":"tomee","run_id":"run-001","file_path":"access.log"}
+      }}],
+      "no_outputs_from":["parse"],
+      "outputs":[{"extract_from":"parse.dropped","conditions":[{"type":"vrl","source":"assert!(exists(.message))"}]}]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "dynamic": "strict",
+  "properties": {
+    "@timestamp": {"type":"date"},
+    "event": {"properties":{
+      "original":{"type":"keyword","index":false,"doc_values":false},
+      "dataset":{"type":"keyword"},
+      "duration":{"type":"long","coerce":false},
+      "id":{"type":"keyword"}
+    }},
+    "http":{"properties":{
+      "request":{"properties":{"method":{"type":"keyword"}}},
+      "response":{"properties":{"status_code":{"type":"integer","coerce":false}}}
+    }},
+    "url":{"properties":{"path":{"type":"keyword"}}},
+    "service":{"properties":{"name":{"type":"keyword"},"version":{"type":"keyword"}}},
+    "host":{"properties":{"name":{"type":"keyword"}}},
+    "labels":{"properties":{"environment":{"type":"keyword"},"scenario":{"type":"keyword"}}},
+    "log":{"properties":{"file":{"properties":{"path":{"type":"keyword"}}}}},
+    "analysis":{"properties":{"run_id":{"type":"keyword"},"schema_version":{"type":"keyword"}}},
+    "user":{"properties":{"id":{"type":"keyword"}}}
+  }
+}

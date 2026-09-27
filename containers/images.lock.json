@@ -1,0 +1,12 @@
+{
+  "platform": "linux/amd64",
+  "checkedAt": "2026-09-27",
+  "digests": {
+    "elasticsearch": "sha256:e083ef4f6b3d5d49115f2893e384d07b94c02c17093f6b7f05e9b2d2821a079c",
+    "kibana": "sha256:1ae77e774eaeaef348a223fd8f15b9a8a4b676d7919da58014c6dc5ebefaefba",
+    "tomee": "sha256:f9d4c47be02afcacadc4e7b2d96b0399206b1f263d526a1c32f36b180b3d29fd",
+    "node": "sha256:5cbc7caba8c2c0f0bca675d1b61b9f2857e1cf1853c6164ee9dd409501a936e7",
+    "rust": "sha256:4c2fd73ef19c5ef9d54bee03b06b2839a392604fbfcd578ed948b71b37c1d7fb",
+    "debian": "sha256:f3034a6ec3c1205360777c4aae76234998866ad18806ae62b63a3f84ccad782b"
+  }
+}

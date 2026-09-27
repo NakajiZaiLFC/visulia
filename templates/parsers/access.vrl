@@ -1,0 +1,62 @@
+# VISULIA access parser. Units and format are explicit metadata, never inferred from product names.
+raw = string!(.message)
+meta = object!(.metadata)
+format = string!(meta.format)
+unit = string!(meta.duration_unit)
+service = string!(meta.service_name)
+version = string!(meta.service_version)
+environment = string!(meta.environment)
+host = string!(meta.host_name)
+run = string!(meta.run_id)
+file = string!(meta.file_path)
+assert!(length(raw) <= 65536, "line_too_large")
+assert!(length(service)>0 && length(version)>0 && length(environment)>0 && length(host)>0 && length(run)>0 && length(file)>0, "missing_metadata")
+time = null
+method = ""
+path = ""
+status = 0
+elapsed_ns = null
+request_id = null
+user = null
+if format == "pipe-v1" {
+  p = parse_regex!(raw, r'^(?P<time>[^|]+)\|(?P<method>[A-Z]+)\|(?P<path>/[^|]*)\|(?P<status>[1-5][0-9]{2})\|(?P<duration>[0-9]+(?:\.[0-9]+)?)\|(?P<id>[A-Za-z0-9_-]{1,128})$')
+  time = parse_timestamp!(p.time, format: "%+")
+  method = string(p.method)
+  path = string(p.path)
+  status = to_int!(p.status)
+  digits = if unit == "ns" {0} else if unit == "us" {3} else if unit == "ms" {6} else if unit == "s" {9} else {abort "unknown_duration_unit"}
+  parts = split(string(p.duration), ".", limit: 2)
+  whole = string!(parts[0])
+  fraction = string(parts[1]) ?? ""
+  fraction = replace(fraction, r'0+$', "")
+  assert!(length(fraction) <= digits, "sub_nanosecond_precision")
+  # Decimal string shifting avoids IEEE-754 rounding and overflowing multiplication.
+  padded = slice!(fraction + "000000000", 0, digits)
+  elapsed_ns = to_int!(whole + padded)
+  assert!(elapsed_ns <= 9007199254740991, "duration_out_of_range")
+  if p.id != "-" {request_id=p.id}
+} else if format == "common-v1" {
+  assert!(unit == "none", "common_has_no_duration")
+  p = parse_regex!(raw, r'^\S+ \S+ (?P<user>\S+) \[(?P<time>[^\]]+)\] "(?P<method>[A-Z]+) (?P<path>/[^ ]*) HTTP/[0-9.]+" (?P<status>[1-5][0-9]{2}) (?:[0-9]+|-)$')
+  time = parse_timestamp!(p.time, format: "%d/%b/%Y:%H:%M:%S %z")
+  method = string(p.method)
+  path = string(p.path)
+  status = to_int!(p.status)
+  if p.user != "-" {user=p.user}
+} else {abort "unknown_format"}
+path = split(path, "?", limit: 2)[0]
+. = {
+  "@timestamp": time,
+  "event": {"original":raw,"dataset":"http.access"},
+  "http": {"request":{"method":method},"response":{"status_code":status}},
+  "url": {"path":path},
+  "service": {"name":service,"version":version},
+  "host": {"name":host},
+  "labels": {"environment":environment},
+  "log": {"file":{"path":file}},
+  "analysis": {"run_id":run,"schema_version":"1"}
+}
+if elapsed_ns != null {.event.duration=elapsed_ns}
+if request_id != null {.event.id=request_id}
+if user != null {.user={"id":user}}
+if is_string(meta.scenario) {.labels.scenario=meta.scenario}
