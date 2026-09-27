@@ -2,7 +2,12 @@ import {DurableObject} from 'cloudflare:workers';
 /** SDK simulator: tests fencing only, not a VM or Docker image. */
 export class Container<E> extends DurableObject<E> {
   private release: (()=>void)|undefined;
-  private started=false;
+  private state:{running:boolean};
+  constructor(ctx:DurableObjectState,env:E){
+    const state={running:false};
+    super(ctx,env);this.state=state;
+    Object.defineProperty(ctx,'container',{value:{get running(){return state.running;},getTcpPort(port:number){return {async fetch(request:Request){return Response.json({authorization:request.headers.get('authorization'),cookie:request.headers.get('cookie'),port});}};}}});
+  }
   private destroys=0;
   private startOptions:unknown;
   defaultPort?:number;
@@ -12,14 +17,14 @@ export class Container<E> extends DurableObject<E> {
   async startAndWaitForPorts(options:unknown) {
     this.startOptions=options;
     await new Promise<void>(resolve=>{this.release=resolve;});
-    this.started=true;
+    this.state.running=true;
     await this.onStart();
   }
-  async destroy(){this.destroys++;this.started=false;await this.onStop();}
+  async destroy(){this.destroys++;this.state.running=false;await this.onStop();}
   async onStart(){}
   async onStop(){}
   async onActivityExpired(){}
   async fetch(){return new Response('auto-start should not be reachable');}
   async finishBoot(){this.release?.();}
-  async inspect(){return {options:this.startOptions,agentToken:await this.ctx.storage.get('agentToken'),pending:Boolean(this.release),running:this.started,destroys:this.destroys,closed:await this.ctx.storage.get('closed')};}
+  async inspect(){return {options:this.startOptions,agentToken:await this.ctx.storage.get('agentToken'),pending:Boolean(this.release),running:this.state.running,destroys:this.destroys,closed:await this.ctx.storage.get('closed')};}
 }

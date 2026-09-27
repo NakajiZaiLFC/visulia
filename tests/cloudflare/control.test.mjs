@@ -14,7 +14,7 @@ async function runtime(t, maximum='3', bindings={}) {
     durableObjects:{REGISTRY:{className:'TestRegistry',useSQLite:true},SESSIONS:{className:'TestSession',useSQLite:true},STACKS:{className:'TestStack',useSQLite:true}},
     bindings:{MAX_SESSIONS:maximum,CLIENT_HASH_SALT:'test-only-salt',...bindings}}));
   t.after(async()=>{await mf.dispose();await rm(dir,{recursive:true,force:true});});
-  const send=(path, method='GET', token, body, ip='192.0.2.1')=>mf.dispatchFetch('https://visulia.example'+path,{method,headers:{'CF-Connecting-IP':ip,...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+  const send=(path, method='GET', token, body, ip='192.0.2.1')=>mf.dispatchFetch('https://visulia.example'+path,{method,redirect:'manual',headers:{'CF-Connecting-IP':ip,...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
   return {mf,send};
 }
 
@@ -118,4 +118,26 @@ test('boot failure revokes the issued token and releases capacity after destruct
   }
   assert.equal((await send(`/v1/sessions/${a.id}`,'GET',a.token)).status,401);
   assert.equal((await send('/v1/sessions','POST',undefined,undefined,'192.0.2.9')).status,201);
+});
+
+test('session API forwards only for the ready owner and retains method, query and body',async t=>{
+ const {send,mf}=await runtime(t);
+ const a=await (await send('/v1/sessions','POST')).json();
+ const b=await (await send('/v1/sessions','POST',undefined,undefined,'192.0.2.2')).json();
+ for(let i=0;i<20;i++){if((await (await send(`/v1/sessions/${a.id}`,'GET',a.token)).json()).state==='ready')break;}
+ const path=`/v1/sessions/${a.id}/api/elasticsearch/_query?format=json`;
+ assert.equal((await send(path,'POST',b.token,{query:'FROM visulia-*'})).status,401);
+ const response=await send(path,'POST',a.token,{query:'FROM visulia-*'});
+ assert.equal(response.status,200);
+ assert.deepEqual(await response.json(),{service:'stack-double',path:'/elasticsearch/_query',query:'?format=json',method:'POST',body:'{"query":"FROM visulia-*"}'});
+ const redirected=await send(`/v1/sessions/${a.id}/api/s/${a.id}/kibana/login-redirect`,'GET',a.token);
+ assert.equal(redirected.status,302);
+ assert.equal(redirected.headers.get('location'),`/v1/sessions/${a.id}/api/s/${a.id}/kibana/app/home`);
+ const followed=await send(redirected.headers.get('location'),'GET',a.token);
+ assert.equal(followed.status,200);
+ assert.equal((await followed.json()).path,`/s/${a.id}/kibana/app/home`);
+ const {SESSIONS}=await mf.getBindings();await SESSIONS.getByName(a.id).setProvisioning();
+ assert.equal((await send(path,'POST',a.token,{query:'FROM visulia-*'})).status,409);
+ await send(`/v1/sessions/${a.id}`,'DELETE',a.token);
+ assert.equal((await send(path,'POST',a.token,{query:'FROM visulia-*'})).status,401);
 });

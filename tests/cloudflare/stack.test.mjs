@@ -13,6 +13,7 @@ test('delete overlapping a slow boot leaves the VM stopped and permanently fence
     import {Stack} from './src/cloudflare/stack.ts';
     export class TestStack extends Stack {
       async begin(id='session'){this.ctx.waitUntil(this.boot(id).catch(()=>{}));}
+      async proxyResult(){const result=await this.proxy(new Request('https://internal/health',{headers:{authorization:'Bearer owner-token',cookie:'owner-cookie'}}));return {status:result.status,body:await result.text()};}
       async stopSpontaneously(){await this.destroy();}
       async removeInBackground(){this.ctx.waitUntil(this.remove());}
       async bootResult(){try{await this.boot('session');return 'accepted';}catch(e){return e.message;}}
@@ -38,7 +39,12 @@ test('delete overlapping a slow boot leaves the VM stopped and permanently fence
   assert.equal((await stack.fetch('https://internal/')).status,404);
   const second=STACKS.getByName('second');await second.begin('second');await second.finishBoot();
   for(let i=0;i<20;i++){if((await second.inspect()).running)break;}
+  const live=await second.inspect();
+  const proxied=await second.proxyResult();
+  assert.equal(proxied.status,200);
+  assert.deepEqual(JSON.parse(proxied.body),{authorization:'Bearer '+live.agentToken,cookie:null,port:8081});
   await second.stopSpontaneously();
+  assert.equal((await second.proxyResult()).status,410);
   const receiver=SESSIONS.getByName('second');
   let notified=false;
   for(let i=0;i<20;i++){notified=await receiver.notified();if(notified)break;}

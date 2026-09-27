@@ -152,6 +152,17 @@ export class SessionController extends DurableObject<Env> {
       return s;
     });
     if(!authorized) return denied();
+    if(action==='proxy') {
+      if(authorized.state!=='ready')return json({error:'NOT_READY'},409);
+      const response=await this.env.STACKS.getByName(authorized.id).proxy(request);
+      const location=response.headers.get('location');
+      if(location?.startsWith('/')&&!location.startsWith('//')) {
+        const headers=new Headers(response.headers);
+        headers.set('location',`/v1/sessions/${authorized.id}/api${location}`);
+        return new Response(response.body,{status:response.status,headers});
+      }
+      return response;
+    }
     if(action==='delete') {
       await this.close('requested');
       const result=await this.ctx.storage.get<Session>('session');
@@ -183,8 +194,13 @@ export default {
         }
         return json({id:reservation.id,token,heartbeatSeconds:30},201);
       }
-      const match=/^\/v1\/sessions\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(\/heartbeat)?$/.exec(path);
+      const match=/^\/v1\/sessions\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(\/heartbeat|\/api\/.*)?$/.exec(path);
       if(!match) return json({error:'NOT_FOUND'},404);
+      if(match[2]?.startsWith('/api/')) {
+        const target=new URL(request.url);
+        target.pathname=match[2].slice('/api'.length);
+        return await env.SESSIONS.getByName(match[1]!).handle(new Request(target,request),'proxy');
+      }
       const action=match[2]?(request.method==='POST'?'heartbeat':undefined):
         request.method==='GET'?'status':request.method==='DELETE'?'delete':undefined;
       if(!action) return json({error:'METHOD_NOT_ALLOWED'},405);

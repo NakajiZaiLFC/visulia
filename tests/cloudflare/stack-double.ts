@@ -12,7 +12,7 @@ export class TestStack extends DurableObject {
     if(await this.ctx.storage.get('fail')) throw new Error('destruction failed');
     await this.ctx.storage.put('running', false);
   }
-  async proxy(_request: Request) { return Response.json({service:'stack-double'}); }
+  async proxy(request: Request) { if(new URL(request.url).pathname.endsWith('/login-redirect'))return new Response(null,{status:302,headers:{location:new URL(request.url).pathname.replace('/login-redirect','/app/home')}}); return Response.json({service:'stack-double',path:new URL(request.url).pathname,query:new URL(request.url).search,method:request.method,body:await request.text()}); }
 }
 
 import { SessionController, Registry } from '../../src/cloudflare/control.js';
@@ -28,6 +28,7 @@ export class TestSession extends SessionController {
     await this.alarm();
   }
   async retryCleanup() {await this.alarm();}
+  async setProvisioning() {const s=await this.ctx.storage.get<Session>('session');if(s)await this.ctx.storage.put('session',{...s,state:'provisioning'});}
   async hasSessionData() {return Boolean(await this.ctx.storage.get('session'));}
 }
 
