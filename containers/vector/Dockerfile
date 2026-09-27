@@ -1,6 +1,8 @@
 # Build from the audited release commit, not a moving PR branch.
 FROM rust:1.95-bookworm@sha256:4c2fd73ef19c5ef9d54bee03b06b2839a392604fbfcd578ed948b71b37c1d7fb AS build
 RUN apt-get update && apt-get install -y --no-install-recommends clang cmake pkg-config libssl-dev protobuf-compiler git ca-certificates && rm -rf /var/lib/apt/lists/*
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 WORKDIR /src/vector
 RUN git init && git remote add origin https://github.com/vectordotdev/vector.git && git fetch --depth=1 origin 2bcad9bbb84e201dcfd58c22b1f779290101b728 && git checkout --detach FETCH_HEAD
 COPY patches/vector-0.58.0-flush.patch /tmp/flush.patch

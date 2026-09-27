@@ -22,6 +22,10 @@ test('delete overlapping a slow boot leaves the VM stopped and permanently fence
   t.after(()=>mf.dispose());
   const {STACKS,SESSIONS}=await mf.getBindings();const stack=STACKS.getByName('session');
   await stack.begin();
+  let bootState;
+  for(let i=0;i<20;i++){bootState=await stack.inspect();if(bootState.options)break;}
+  assert.match(bootState.options.startOptions.envVars.VISULIA_AGENT_TOKEN,/^[a-f0-9]{64}$/);
+  assert.equal(bootState.options.startOptions.envVars.VISULIA_AGENT_TOKEN,bootState.agentToken);
   await stack.removeInBackground();
   assert.equal((await stack.inspect()).closed,true);
   await stack.finishBoot();
@@ -29,6 +33,7 @@ test('delete overlapping a slow boot leaves the VM stopped and permanently fence
   let state;
   for(let i=0;i<20;i++){state=await stack.inspect();if(state.destroys>=3&&!state.running)break;}
   assert.equal(state.running,false);assert.ok(state.destroys>=3);
+  assert.equal(state.agentToken,undefined);
   assert.equal(await stack.bootResult(),'CLOSED');
   assert.equal((await stack.fetch('https://internal/')).status,404);
   const second=STACKS.getByName('second');await second.begin('second');await second.finishBoot();

@@ -12,10 +12,11 @@ export class Stack extends Container<Env> {
   async boot(id:string):Promise<void> {
     if(await this.ctx.storage.get('closed')) throw new Error('CLOSED');
     if(await this.ctx.storage.get('started')) throw new Error('ALREADY_STARTED');
-    await this.ctx.storage.put({started:true,sessionId:id});
+    const agentToken=Array.from(crypto.getRandomValues(new Uint8Array(32)),byte=>byte.toString(16).padStart(2,'0')).join('');
+    await this.ctx.storage.put({started:true,sessionId:id,agentToken});
     this.startup=this.startAndWaitForPorts({
       ports:[8081],
-      startOptions:{envVars:{VISULIA_SESSION_ID:id},enableInternet:false},
+      startOptions:{envVars:{VISULIA_SESSION_ID:id,VISULIA_AGENT_TOKEN:agentToken},enableInternet:false},
       cancellationOptions:{portReadyTimeoutMS:240_000},
     });
     try {
@@ -29,6 +30,7 @@ export class Stack extends Container<Env> {
     // Boot may have passed its check before remove persisted its tombstone.
     if(this.startup) { try {await this.startup;} catch { /* failed boot also needs destruction */ } }
     await this.destroy();
+    await this.ctx.storage.delete('agentToken');
   }
   override async onStart() {
     if(await this.ctx.storage.get('closed')) await this.destroy();
@@ -37,6 +39,7 @@ export class Stack extends Container<Env> {
   override async onStop() {
     const alreadyClosed=await this.ctx.storage.get('closed');
     await this.ctx.storage.put('closed',true);
+    await this.ctx.storage.delete('agentToken');
     const id=await this.ctx.storage.get<string>('sessionId');
     if(!alreadyClosed && id) {
       // Awaiting here would deadlock with destroy() in the receiving controller.
@@ -52,7 +55,12 @@ export class Stack extends Container<Env> {
       return new Response('Session stopped',{status:410});
     }
     // Direct port access cannot auto-start a stopped container.
-    return this.ctx.container.getTcpPort(8081).fetch(request);
+    const agentToken=await this.ctx.storage.get<string>('agentToken');
+    if(!agentToken)return new Response('Session stopped',{status:410});
+    const headers=new Headers(request.headers);
+    headers.set('authorization','Bearer '+agentToken);
+    headers.delete('cookie');
+    return this.ctx.container.getTcpPort(8081).fetch(new Request(request,{headers}));
   }
   override async fetch():Promise<Response> { return new Response('Not found',{status:404}); }
 }

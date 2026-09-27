@@ -1,0 +1,32 @@
+name: Runtime image verification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run test:worker && npm run check:worker
+      - name: Build patched Vector and upstream regression tests
+        run: docker build --build-arg CARGO_BUILD_JOBS=2 -t visulia-vector:build -f containers/vector/Dockerfile .
+      - name: Exercise patched Vector delivery on Linux
+        run: |
+          container_id=$(docker create visulia-vector:build)
+          docker cp "$container_id:/usr/local/bin/vector" "$RUNNER_TEMP/vector"
+          docker rm "$container_id"
+          export VECTOR_BIN="$RUNNER_TEMP/vector"
+          npm run test:vector
+          for attempt in $(seq 1 10); do node --test tests/vector/*.test.mjs; done
+      - name: Assemble session runtime
+        run: docker build -t visulia-stack:build -f containers/stack/Dockerfile .
+      - name: Actual TomEE, Vector, Elasticsearch and Kibana smoke test
+        run: node scripts/test-stack.mjs

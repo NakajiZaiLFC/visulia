@@ -17,7 +17,7 @@ VISULIAは、npmで導入する対話型CLIから一時的なログ解析環境�
 - 継続追記、読み取り再開、ディスクバッファ、renameローテーションの投入設定と実Vectorテスト。未修正版Vectorで断続的な停止を確認しており、修正版ビルドでの再検証が残っています。
 - Cloudflare WorkersのセッションAPIと、Durable Objectsによる認証・利用枠・期限管理。
 - Containerの起動・削除アダプター。起動中の終了、削除失敗の再試行、異常終了後の失効に対応。
-- コンテナ内サービスの起動順序、個別認証情報、停止処理、専用ファイル領域の準備。実サービスへの接続部分と実行イメージへの組み込みは残っています。
+- コンテナ内サービスの起動処理、個別認証情報、停止処理、専用ファイル領域の準備。認証付き管理APIと実行イメージの定義を追加し、リモートでの実サービス検証を準備しています。
 - TomEEデモアプリとアクセスログ設定、デモリクエスト生成処理。実TomEEでの動作確認は未実施です。
 
 Cloudflare向けの制御処理はworkerdで検証しています。Container本体はテスト用の代替実装で検証した段階で、Elasticsearch・Kibanaの実行イメージ、CLI、実環境へのデプロイは未完了です。SQLiteは自己ホスト向けの構成要素であり、Workersでの保存先はDurable Objectsです。
@@ -49,3 +49,5 @@ npm run check:worker
 Cloudflareでの構成は`docs/architecture/cloudflare.md`に記載しています。`wrangler.containers.example.jsonc`は実行イメージを組み込むための未完成の構成案で、そのままデプロイするものではありません。`wrangler.types.jsonc`は型生成だけに使用します。
 
 ログ形式・時間単位・Mappingの編集範囲・配信保証は`docs/pipeline-contract.md`、実Vectorによる検証は`docs/evidence/2026-09-27-vector-pipeline.md`を参照してください。
+
+実行イメージとリモート検証の手順は`docs/runtime-image.md`を参照してください。
