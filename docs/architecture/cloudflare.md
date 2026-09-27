@@ -14,7 +14,7 @@
 
 - [x] Implement Worker API and Durable Object session/capacity lifecycle with workerd integration tests.
 - [x] Implement Container adapter with start/close race fencing and expiry cleanup (SDK simulator verified; real VM verification remains below).
-- [ ] Build linux/amd64 image with actual services, editable templates, upload and demo generator.
+- [ ] Build linux/amd64 image with actual services, editable templates, upload and demo generator. Runtime config, bootstrap ordering, process supervision, private filesystem preparation and demo request generator are implemented as building blocks; see `../evidence/2026-09-27-runtime-bootstrap.md`.
 - [ ] Implement ES|QL/Kibana application and browser handoff.
 - [ ] Implement npm CLI, package-install test, remote setup diagnostics.
 - [ ] Build image in remote CI; validate hosted session isolation, data cleanup and rendered dashboard.

@@ -33,4 +33,4 @@ Official linux/amd64 manifests were retrieved for Elastic 9.4.7:
 - Elasticsearch: `docker.elastic.co/elasticsearch/elasticsearch@sha256:e083ef4f6b3d5d49115f2893e384d07b94c02c17093f6b7f05e9b2d2821a079c`
 - Kibana: `docker.elastic.co/kibana/kibana@sha256:1ae77e774eaeaef348a223fd8f15b9a8a4b676d7919da58014c6dc5ebefaefba`
 
-These are image-resolution evidence only; no image has yet been built or launched. The Docker official-images TomEE listing currently includes `10.2.0-jre21-Temurin-ubuntu-webprofile`; its digest still needs pinning.
+These are image-resolution evidence only; no image has yet been built or launched. The Docker official-images TomEE listing currently includes `10.2.0-jre21-Temurin-ubuntu-webprofile`; its linux/amd64 digest is now pinned in `containers/images.lock.json` (manifest lookup only; image execution remains unverified).

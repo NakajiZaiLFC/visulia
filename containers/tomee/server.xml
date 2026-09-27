@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Server port="-1">
+  <Listener className="org.apache.catalina.startup.VersionLoggerListener" />
+  <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
+  <Service name="Catalina">
+    <Connector address="127.0.0.1" port="8080" protocol="HTTP/1.1" connectionTimeout="5000" maxThreads="16" maxConnections="32" />
+    <Engine name="Catalina" defaultHost="localhost">
+      <Host name="localhost" appBase="webapps" unpackWARs="false" autoDeploy="false">
+        <Valve className="org.apache.catalina.valves.AccessLogValve" directory="/work/raw" prefix="access" suffix=".log" rotatable="false" buffered="false" conditionUnless="visulia.skiplog"
+          pattern="%{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}t|%m|%U|%s|%D|%{X-Visulia-Request-Id}i" />
+      </Host>
+    </Engine>
+  </Service>
+</Server>
