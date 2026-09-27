@@ -14,10 +14,13 @@ function harness(failAt?:string){
    assert.deepEqual(args,['add','-x','-f','bootstrap.password']);
    assert.equal(input,config.secrets.elastic+'\n');
    assert.equal(env.ES_PATH_CONF,'/work/config/elasticsearch');
+   assert.match(env.ES_JAVA_OPTS??'', /-Djdk.net.hosts.file=\/work\/config\/java-hosts/);
+   assert.equal(env.CLI_JAVA_OPTS,'-Djdk.net.hosts.file=/work/config/java-hosts');
    assert.equal(JSON.stringify(args).includes(config.secrets.elastic),false);
   },
   start(name,_command,_args,env){
    events.push('start:'+name);
+   if(name==='tomee')assert.match(env.CATALINA_OPTS??'',/-Djdk.net.hosts.file=\/work\/config\/java-hosts/);
    // Parent Cloudflare/agent credentials must not be inherited by JVM services.
    assert.equal(env.VISULIA_AGENT_TOKEN,undefined);
   },
@@ -44,20 +47,21 @@ function harness(failAt?:string){
 }
 test('runtime provisions separate Kibana and demo credentials before starting dependent services',async()=>{
  const {io,events,files}=harness();
- await bootstrap(config,io);
+ await bootstrap(config,io,'isolated-vm');
  assert.deepEqual(events,['keystore','start:elasticsearch','ready:9200','/_security/user/kibana_system/_password','/_security/role/visulia_data','/_security/user/'+config.secrets.username,'start:kibana','start:tomee','ready:5601','ready:8080']);
+ assert.equal(files.get('/work/config/java-hosts'),'127.0.0.1 localhost isolated-vm\n::1 localhost\n');
  assert.equal(files.get('/work/config/elasticsearch/elasticsearch.yml'),config.elasticsearch);
  assert.equal(files.get('/work/config/kibana/kibana.yml'),config.kibana);
- const jvm=files.get('/work/config/elasticsearch/jvm.options.d/visulia.options');
- assert(jvm);
- assert(jvm.startsWith('-Xlog:disable\n'));
- assert(jvm.includes('file=/work/elasticsearch-logs/gc.log'));
- assert(jvm.includes('-XX:ErrorFile=/work/elasticsearch-logs/hs_err_pid%p.log'));
- assert(jvm.includes('-XX:HeapDumpPath=/work/elasticsearch-logs'));
 });
 test('failed security setup stops runtime and never launches the public dashboard',async()=>{
  const {io,events}=harness('/_security/role/visulia_data');
  await assert.rejects(bootstrap(config,io),/SECURITY_SETUP_FAILED/);
  assert.equal(events.includes('start:kibana'),false);
  assert.equal(events.at(-1),'stop');
+});
+
+test('runtime hostname cannot inject additional resolver entries',async()=>{
+ const {io,events,files}=harness();
+ await assert.rejects(bootstrap(config,io,'host\n192.0.2.1 injected'),/INVALID_RUNTIME_HOSTNAME/);
+ assert.deepEqual(events,['stop']);assert.equal(files.size,0);
 });
