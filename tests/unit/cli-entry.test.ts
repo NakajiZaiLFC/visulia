@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
-test('CLI creates a session, loads packaged templates and deletes the environment on quit',async t=>{
+for(const prefix of [[],['start']])test(`CLI ${prefix.join(' ')} creates a session, loads packaged templates and deletes the environment on quit`,async t=>{
  const seen:string[]=[],id='aabbccdd-1111-2222-3333-001122334455';
  const server=createServer(async(req,res)=>{
   seen.push(req.method+' '+req.url);let text='';for await(const chunk of req)text+=chunk;
@@ -16,7 +16,7 @@ test('CLI creates a session, loads packaged templates and deletes the environmen
  server.listen(0,'127.0.0.1');await once(server,'listening');
  t.after(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});
  const address=server.address();assert(address&&typeof address!=='string');
- const child=spawn(process.execPath,[process.env.VISULIA_CLI_ENTRY??'dist/src/cli/main.js','--server',`http://127.0.0.1:${address.port}`],{stdio:['pipe','pipe','pipe']});
+ const child=spawn(process.execPath,[process.env.VISULIA_CLI_ENTRY??'dist/src/cli/main.js',...prefix,'--server',`http://127.0.0.1:${address.port}`],{stdio:['pipe','pipe','pipe']});
  let output='';child.stdout.on('data',chunk=>{output+=chunk;});child.stderr.on('data',chunk=>{output+=chunk;});
  child.stdin.end('quit\n');const [code]=await once(child,'exit');
  assert.equal(code,0,output);assert(output.includes('削除を確認'));

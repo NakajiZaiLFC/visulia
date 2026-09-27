@@ -8,10 +8,11 @@ import {exportRunTemplate,saveTemplateFile} from './templates.js';
 import {SessionClient} from './client.js';
 
 const args=process.argv.slice(2);
+if(args[0]==='start')args.shift();
 if(args.includes('--help')||args.includes('-h')){
- console.log('VISULIA\n使い方: visulia [--server https://デモサーバー]\n接続先は VISULIA_SERVER でも指定できます。\n専用の一時環境でログを解析します。終了時に環境を削除します。');
+ console.log('VISULIA\n使い方: visulia [start] [--server https://デモサーバー]\n接続先は VISULIA_SERVER でも指定できます。\n専用の一時環境でログを解析します。終了時に環境を削除します。');
 }else if(args.length&&!(args.length===2&&args[0]==='--server')){
- console.error('使い方: visulia [--server https://デモサーバー]');process.exitCode=1;
+ console.error('使い方: visulia [start] [--server https://デモサーバー]');process.exitCode=1;
 }else{
  const abort=new AbortController();
  const terminal=createInterface({input:process.stdin,output:process.stdout,terminal:process.stdin.isTTY??false});
