@@ -1,4 +1,4 @@
-import { IDLE_MS, MAX_MS, SessionError, type Session } from './types.js';
+import { IDLE_MS, MAX_MS, SessionError, type Session, type Reason } from './types.js';
 import { matchesToken } from './token.js';
 
 function validateTime(now: number, minimum = 0): void {
@@ -44,4 +44,17 @@ export function heartbeat(session: Session, token: string, now: number): Session
   // Cap the delta before addition to avoid overflow near MAX_SAFE_INTEGER.
   const idleExpiresAt = now + Math.min(IDLE_MS, session.maxExpiresAt - now);
   return { ...session, lastHeartbeatAt: now, idleExpiresAt };
+}
+
+/** Internal transition: the API must authenticate user-initiated requests first. */
+export function beginClose(session: Session, reason: Reason): Session {
+  if (session.state === 'closing' || session.state === 'deleted') return session;
+  return { ...session, state: 'closing', closeReason: session.closeReason ?? reason };
+}
+
+/** Call only after the resource cleanup attempt actually returns an outcome. */
+export function finishClose(session: Session, success: boolean): Session {
+  if (session.state === 'deleted' && success) return session;
+  if (session.state !== 'closing') throw new SessionError('INVALID_STATE');
+  return { ...session, state: success ? 'deleted' : 'cleanup_failed' };
 }
