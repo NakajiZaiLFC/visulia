@@ -20,7 +20,7 @@ try{
   }catch{await delay(2000);}
  }
  if(!ready)throw new Error('STACK_READINESS_TIMEOUT');
- const {stdout}=await docker(['exec',name,'node','--input-type=module','-e',await readFile(new URL('./stack-smoke-inside.mjs',import.meta.url),'utf8')],90000);
+ const {stdout}=await docker(['exec',name,'node','--input-type=module','-e',await readFile(new URL('./stack-smoke-inside.mjs',import.meta.url),'utf8')],180000);
  process.stdout.write(stdout);
 }finally{
  {

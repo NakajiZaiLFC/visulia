@@ -40,6 +40,7 @@ export async function createDashboard(runId:string,api:Api):Promise<{id:string;p
  const created=await api(base+'/api/dashboards','POST',body);
  if(typeof created?.id!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(created.id))throw new Error('INVALID_DASHBOARD_RESPONSE');
  const saved=await api(base+'/api/dashboards/'+created.id);
+ if(saved?.warnings?.length)throw new Error('DASHBOARD_INCOMPLETE');
  const panels=saved?.data?.panels;
  if(!Array.isArray(panels)||panels.length!==6)throw new Error('DASHBOARD_VERIFY_FAILED');
  const savedQueries=panels.flatMap((panel:any)=>panel.config?.data_source?[panel.config.data_source.query]:(panel.config?.layers??[]).map((layer:any)=>layer.data_source?.query));

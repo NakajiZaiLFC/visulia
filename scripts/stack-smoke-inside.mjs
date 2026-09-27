@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
+import {pullDashboardTemplate,applyDashboardTemplate} from '/opt/visulia/dist/src/dashboard/template.js';
 import {createDashboard} from '/opt/visulia/dist/src/dashboard/create.js';
 const base='http://127.0.0.1:8081';
 const authorization='Bearer '+process.env.VISULIA_AGENT_TOKEN;
@@ -53,9 +54,15 @@ try{
  await api(runPath+'/reparse','POST');await delivered(8);
  const dashboard=await createDashboard(run.id,api);
  assert.equal(typeof dashboard.id,'string');
+ const template=await pullDashboardTemplate(run.id,dashboard.id,api);
+ template.dashboard.title='VISULIA edited template';
+ template.dashboard.panels[0].config.data_source.query=template.dashboard.panels[0].config.data_source.query.replace('FROM {{VISULIA_INDEX}}','FROM {{VISULIA_INDEX}} | WHERE http.response.status_code >= 400');
+ const copied=await applyDashboardTemplate(run.id,template,api);
+ assert.notEqual(copied.id,dashboard.id);
+ assert.equal((await api(credentials.kibanaPath+'/api/dashboards/'+dashboard.id)).data.title.startsWith('VISULIA —'),true);
  const created=await api(credentials.kibanaPath+'/api/data_views/data_view','POST',{data_view:{title:index,name:'VISULIA smoke',timeFieldName:'@timestamp'}});
  assert.equal(typeof created.data_view?.id,'string');
  const loaded=await api(credentials.kibanaPath+'/api/data_views/data_view/'+encodeURIComponent(created.data_view.id));
  assert.equal(loaded.data_view.title,index);
- console.log(JSON.stringify({actualTomEERequests:8,parsedDocuments:8,continuousIngest:true,reparse:true,esqlStatusCounts:[[200,4],[404,2],[500,2]],kibanaDataView:true,dashboardSaved:dashboard.id}));
+ console.log(JSON.stringify({actualTomEERequests:8,parsedDocuments:8,continuousIngest:true,reparse:true,esqlStatusCounts:[[200,4],[404,2],[500,2]],kibanaDataView:true,dashboardSaved:dashboard.id,editedTemplateSaved:copied.id}));
 }finally{await api(runPath+'/stop','POST');}

@@ -3,7 +3,8 @@ import {createInterface} from 'node:readline';
 import {readFile,stat} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createDashboard} from '../dashboard/create.js';
-import {exportRunTemplate} from './templates.js';
+import {pullDashboardTemplate,applyDashboardTemplate} from '../dashboard/template.js';
+import {exportRunTemplate,saveTemplateFile} from './templates.js';
 import {SessionClient} from './client.js';
 
 const args=process.argv.slice(2);
@@ -41,9 +42,10 @@ if(args.includes('--help')||args.includes('-h')){
   }
   const config={metadata:{format:'pipe-v1',duration_unit:'us',service_name:'tomee',service_version:'10.2.0',environment:'demo',host_name:'demo'},parser:await readFile(new URL('../../../templates/parsers/access.vrl',import.meta.url),'utf8'),mapping:JSON.parse(await readFile(new URL('../../../templates/mappings/access.json',import.meta.url),'utf8'))};
   const run=await client.api('/runs','POST',config),path='/runs/'+run.id;
+  let latestDashboard:string|undefined;
   console.log('準備できました。まず demo でサンプルを生成し、check → ingest の順に進めます。');
   while(!abort.signal.aborted){
-   const command=await ask('\ninit / demo / upload / template / config / check / ingest / status / stop / reparse / query / dashboard / kibana / quit','status');
+   const command=await ask('\ninit / demo / upload / template / config / check / ingest / status / stop / reparse / query / dashboard / dashboard-pull / dashboard-apply / kibana / quit','status');
    if(command==='quit')break;
    try{
     if(command==='init'){
@@ -81,8 +83,19 @@ if(args.includes('--help')||args.includes('-h')){
      const result=await client.api(path);console.log(JSON.stringify({state:result.state,bytes:result.bytes,check:result.check,demo:result.demo},null,2));
     }else if(command==='dashboard'){
      console.log('クエリを検証し、新しいDashboardを作成しています…');
-     const result=await createDashboard(run.id,client.api.bind(client));
+     const result=await createDashboard(run.id,client.api.bind(client));latestDashboard=result.id;
      console.log('Dashboardの保存を確認しました。60秒以内に開いてください。\n'+await client.browserLink(result.id));
+    }else if(command==='dashboard-pull'){
+     const id=await ask('取得するDashboard ID',latestDashboard??'');
+     const file=await ask('保存先（新規ファイル）','visulia-dashboard.json');
+     await saveTemplateFile(file,await pullDashboardTemplate(run.id,id,client.api.bind(client)));
+     console.log('編集用テンプレートを保存しました。dashboard-applyで新しいDashboardとして適用できます。');
+    }else if(command==='dashboard-apply'){
+     const file=await ask('編集したDashboardテンプレートのパス');
+     const info=await stat(file);if(!info.isFile()||info.size>1024*1024)throw new Error('INVALID_TEMPLATE_FILE');
+     console.log('現在のログの期間・参照先に合わせ、クエリを検証して新しいDashboardを作成します。');
+     const result=await applyDashboardTemplate(run.id,JSON.parse(await readFile(file,'utf8')),client.api.bind(client));latestDashboard=result.id;
+     console.log('保存を確認しました。60秒以内に開いてください。\n'+await client.browserLink(result.id));
     }else if(command==='kibana'){
      console.log('60秒以内にこのリンクをブラウザで開いてください。CLIを終了すると環境は削除されます。\n'+await client.browserLink());
     }else if(command==='query'){
@@ -113,6 +126,10 @@ function safeError(error:unknown){
   TEMPLATE_EXISTS:'同名のファイルがあります。別の保存先を指定してください。',
   INVALID_CONFIG:'設定を適用できませんでした。metadata・Parser・Mappingを確認してください。',
   VECTOR_EXECUTION_FAILED:'Parserの実行に失敗しました。templateで設定を取得して構文を確認してください。',
+  UNSUPPORTED_QUERY_TEMPLATE:'このクエリの参照先を安全に置換できませんでした。FROM句以外の参照先を確認してください。',
+  UNSUPPORTED_TEMPLATE_PANEL:'このテンプレート操作はインラインES|QLパネルとテキストパネルに対応しています。ライブラリ参照などはKibanaで編集してください。',
+  DASHBOARD_INCOMPLETE:'Kibana APIが一部のパネルを返せませんでした。欠落したテンプレートとして保存せず停止しました。',
+  TEMPLATE_RUN_REFERENCE_MISSING:'現在の解析先を参照するクエリがありません。Dashboard IDとテンプレートを確認してください。',
   INVALID_DEMO:'デモにはpipe-v1・usの設定と、指定範囲内の件数・レートが必要です。',
  };
  return Object.hasOwn(hints,message)?hints[message]!: /^[A-Z][A-Z0-9_]{0,79}$/.test(message)?message:'OPERATION_FAILED';
