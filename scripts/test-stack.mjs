@@ -28,6 +28,15 @@ try{
   const {stdout,stderr}=await docker(['logs',name]);
   for(const line of (stdout+'\n'+stderr).split('\n'))if(/^RUNTIME_(?:START_FAILED|ERROR:[A-Z]+|PHASE:[a-z]+|BOOTSTRAP:[a-z0-9:-]+)$/.test(line))console.error(line);
  }catch{}
+ // Reproduce startup in another fresh, network-disabled container. This image has
+ // never accepted user data; diagnostic output redacts its generated credentials.
+ const diagnosticName=name+'-diagnostic';
+ try{
+  const source=await readFile(new URL('./diagnose-stack-inside.mjs',import.meta.url),'utf8');
+  const result=await docker(['run','--name',diagnosticName,'--pull','never','--network','none','--memory','6g','--cpus','2','--entrypoint','node',process.env.VISULIA_STACK_IMAGE??'visulia-stack:build','--input-type=module','-e',source],150000);
+  process.stderr.write(result.stdout+result.stderr);
+ }catch{console.error('STARTUP_DIAGNOSTIC_UNAVAILABLE');}
+ finally{try{await docker(['rm','-f',diagnosticName]);}catch{}}
  throw error;
 }finally{
  {
